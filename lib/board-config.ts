@@ -1,0 +1,112 @@
+import { Square, CardEffect } from './types'
+
+// 28 squares total (8×8 grid, border squares only)
+// Bottom row L→R: 0-7 | Right col B→T: 8-13 | Top row R→L: 14-21 | Left col T→B: 22-27
+
+export const BOARD: Square[] = [
+  // ── Bottom row (left → right) ──
+  { id: 0,  type: 'start',    name: '起點 🏁',       description: '每次經過領 $2,000' },
+  { id: 1,  type: 'property', name: '便利商店',        color: 'brown',    price: 600,  rent: [90,   270]  },
+  { id: 2,  type: 'date',     name: '汽車旅館 💕',    description: '雙方各付 $500，擲骰高者得孩子' },
+  { id: 3,  type: 'property', name: '早餐店',          color: 'brown',    price: 800,  rent: [120,  360]  },
+  { id: 4,  type: 'tax',      name: '消費 💸',         description: '繳 $500' },
+  { id: 5,  type: 'property', name: '小吃攤',          color: 'lightblue', price: 1200, rent: [180,  540]  },
+  { id: 6,  type: 'chance',   name: '機會 📦',         description: '抽機會卡' },
+  { id: 7,  type: 'work',     name: '工作 💼',         description: '+$500' },
+  // ── Right column (bottom → top) ──
+  { id: 8,  type: 'property', name: '夜市',            color: 'lightblue', price: 1500, rent: [225,  675]  },
+  { id: 9,  type: 'hospital', name: '醫院 🏥',         description: '每個孩子繳 $200' },
+  { id: 10, type: 'property', name: '電影院',          color: 'pink',     price: 2000, rent: [300,  900]  },
+  { id: 11, type: 'fate',     name: '命運 🎴',         description: '抽命運卡' },
+  { id: 12, type: 'date',     name: '汽車旅館 💕',    description: '雙方各付 $500，擲骰高者得孩子' },
+  { id: 13, type: 'property', name: '補習班',          color: 'pink',     price: 2500, rent: [375, 1125]  },
+  // ── Top row (right → left) ──
+  { id: 14, type: 'work',     name: '工作 💼',         description: '+$500' },
+  { id: 15, type: 'property', name: '百貨公司',        color: 'yellow',   price: 3500, rent: [525, 1575]  },
+  { id: 16, type: 'tax',      name: '消費 💸',         description: '繳 $500' },
+  { id: 17, type: 'property', name: '購物中心',        color: 'yellow',   price: 4500, rent: [675, 2025]  },
+  { id: 18, type: 'date',     name: '汽車旅館 💕',    description: '雙方各付 $500，擲骰高者得孩子' },
+  { id: 19, type: 'chance',   name: '機會 📦',         description: '抽機會卡' },
+  { id: 20, type: 'property', name: '豪宅',            color: 'green',    price: 5000, rent: [750, 1500]  },
+  { id: 21, type: 'work',     name: '工作 💼',         description: '+$500' },
+  // ── Left column (top → bottom) ──
+  { id: 22, type: 'property', name: '金融中心',        color: 'green',    price: 6000, rent: [900, 1800]  },
+  { id: 23, type: 'fate',     name: '命運 🎴',         description: '抽命運卡' },
+  { id: 24, type: 'date',     name: '汽車旅館 💕',    description: '雙方各付 $500，擲骰高者得孩子' },
+  { id: 25, type: 'hospital', name: '醫院 🏥',         description: '每個孩子繳 $200' },
+  { id: 26, type: 'property', name: '科技園區',        color: 'green',    price: 7500, rent: [1125, 2250] },
+  { id: 27, type: 'chance',   name: '機會 📦',         description: '抽機會卡' },
+]
+
+// Color groups — owning all properties in a group gives full rent (rent[1])
+export const COLOR_GROUPS: Record<string, number[]> = {
+  brown:    [1, 3],
+  lightblue:[5, 8],
+  pink:     [10, 13],
+  yellow:   [15, 17],
+  green:    [20, 22, 26],
+}
+
+export const TOTAL_SQUARES   = 28
+export const WIN_CHILDREN    = 5
+export const STARTING_MONEY  = 15000
+export const SALARY          = 2000
+export const WORK_BONUS      = 500
+export const TAX_AMOUNT      = 500
+export const HOSPITAL_PER_CHILD = 200
+export const DATE_FEE        = 500
+export const STEAL_COST      = 1500
+export const RANSOM_COST     = 3000
+export const RANSOM_SECONDS  = 30
+
+// ── Card decks ──
+export interface GameCard {
+  id: number
+  text: string
+  effect: CardEffect
+}
+
+export const CHANCE_CARDS: GameCard[] = [
+  { id: 1, text: '天降地契！獲得一塊隨機地產',            effect: { type: 'gain_property_random' } },
+  { id: 2, text: '領養孩子！花 $1,000 領養一個孩子',      effect: { type: 'adopt_child', cost: 1000 } },
+  { id: 3, text: '孩子生日！向所有玩家收取隨機禮金',       effect: { type: 'collect_from_all_random', min: 200, max: 900 } },
+  { id: 4, text: '一夜情！前進到最近的汽車旅館',           effect: { type: 'move_to_date' } },
+  { id: 5, text: '育兒補助！獲得 $500–$3,000',            effect: { type: 'receive', min: 500, max: 3000 } },
+  { id: 6, text: '孩子出國留學，花費 $1,000–$5,000',       effect: { type: 'pay', min: 1000, max: 5000 } },
+  { id: 7, text: '收紅包！每個孩子得 $100–$1,000',         effect: { type: 'receive_per_child', min: 100, max: 1000 } },
+  { id: 8, text: '回到起點（領薪水）🏁',                   effect: { type: 'move_to_start' } },
+]
+
+export const FATE_CARDS: GameCard[] = [
+  { id: 1, text: '人口販運！隨機一名玩家失去一個孩子',     effect: { type: 'steal_child_random' } },
+  { id: 2, text: '天災！你的隨機一塊地產變回無主',         effect: { type: 'lose_property_random' } },
+  { id: 3, text: '瘟疫！所有玩家（含你）各失去一個孩子',   effect: { type: 'plague' } },
+  { id: 4, text: '破財消災！向所有玩家各付隨機金額',        effect: { type: 'pay_all_random', min: 200, max: 900 } },
+  { id: 5, text: '孩子叛逆離家出走！失去一個孩子',          effect: { type: 'lose_child', amount: 1 } },
+  { id: 6, text: '孩子生病！每個孩子花費 $200–$900',        effect: { type: 'pay_per_child', min: 200, max: 900 } },
+  { id: 7, text: '孩子被領養！失去一個孩子得 $2,000',       effect: { type: 'sell_child', amount: 2000 } },
+  { id: 8, text: '孩子拿獎學金！得 $1,000–$5,000',          effect: { type: 'receive', min: 1000, max: 5000 } },
+]
+
+// Returns the grid position (1-indexed, 8×8) for a given square id
+export function getGridPos(id: number): { row: number; col: number } {
+  if (id === 0)  return { row: 8, col: 1 }              // START bottom-left
+  if (id <= 6)   return { row: 8, col: id + 1 }         // bottom row L→R (cols 2-7)
+  if (id === 7)  return { row: 8, col: 8 }              // WORK bottom-right
+  if (id <= 13)  return { row: 8 - (id - 7), col: 8 }  // right col B→T (rows 7-2)
+  if (id === 14) return { row: 1, col: 8 }              // WORK top-right
+  if (id <= 20)  return { row: 1, col: 8 - (id - 14) } // top row R→L (cols 7-2)
+  if (id === 21) return { row: 1, col: 1 }              // WORK top-left
+  return { row: id - 20, col: 1 }                       // left col T→B (rows 2-7)
+}
+
+export const PLAYER_COLORS = [
+  '#ef4444', // red
+  '#3b82f6', // blue
+  '#22c55e', // green
+  '#f59e0b', // amber
+  '#a855f7', // purple
+  '#ec4899', // pink
+  '#14b8a6', // teal
+  '#f97316', // orange
+]
