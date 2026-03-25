@@ -35,7 +35,6 @@ export default function PlayerPanel({ players, state, myId }: Props) {
               {isMe && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 rounded-full ml-auto">你</span>}
               {isCurrent && !isMe && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 rounded-full ml-auto">回合中</span>}
               {p.is_bankrupt && <span className="text-xs bg-red-100 text-red-600 px-1.5 rounded-full ml-auto">破產</span>}
-              {p.in_jail && <span className="text-xs">⛓️</span>}
             </div>
             <div className="flex gap-3 text-xs text-gray-600">
               <span>💰 ${p.money.toLocaleString()}</span>
