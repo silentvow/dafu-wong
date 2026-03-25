@@ -12,7 +12,7 @@
 }
 
 body {
-  font-family: 'Microsoft JhengHei', '微軟正黑體', Arial, sans-serif;
+  font-family: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', '微軟正黑體', Arial, sans-serif;
   background-color: var(--bg-page);
   color: var(--text-main);
 }
@@ -26,7 +26,16 @@ body {
   100% { transform: rotate(0deg) scale(1); }
 }
 .dice-rolling {
-  animation: dice-spin 0.15s ease-in-out infinite;
+  animation: dice-spin 0.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dice-rolling {
+    animation: none;
+  }
+  .confetti-piece {
+    animation: none;
+  }
 }
 
 /* Confetti animation */
