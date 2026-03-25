@@ -86,14 +86,14 @@ export default function RoomPage() {
           <p className="text-xs text-gray-500 mb-1">房間號碼</p>
           <div className="flex items-center justify-center gap-2">
             <span className="text-3xl font-bold tracking-widest text-amber-700">{id}</span>
-            <button onClick={copyCode} className="text-sm text-amber-500 hover:text-amber-700">
+            <button onClick={copyCode} className="text-lg text-amber-500 hover:text-amber-700 min-w-[44px] min-h-[44px] flex items-center justify-center">
               {copied ? '✅' : '📋'}
             </button>
           </div>
           <p className="text-xs text-gray-400 mt-1">分享給朋友，讓他們輸入這個號碼加入</p>
           <button
             onClick={copyLink}
-            className="mt-2 text-xs text-amber-600 hover:text-amber-800 underline transition"
+            className="mt-2 text-xs text-amber-600 hover:text-amber-800 underline transition min-h-[44px] px-2"
           >
             {copiedLink ? '✅ 連結已複製！' : '🔗 複製房間連結'}
           </button>
