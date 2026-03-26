@@ -33,8 +33,6 @@ export async function POST(req: NextRequest) {
     position: 0,
     money: STARTING_MONEY,
     children: 0,
-    in_jail: false,
-    jail_turns: 0,
     is_bankrupt: false,
     next_date_double: false,
   })
