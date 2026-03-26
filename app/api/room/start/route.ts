@@ -10,6 +10,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '至少需要 2 名玩家' }, { status: 400 })
   }
 
+  // Verify caller is host (lowest turn_order)
+  const host = players.reduce((a: { turn_order: number; id: string }, b: { turn_order: number; id: string }) =>
+    a.turn_order < b.turn_order ? a : b)
+  if (host.id !== playerId) {
+    return NextResponse.json({ error: '只有房主可以開始遊戲' }, { status: 403 })
+  }
+
   // Shuffle turn order
   const shuffled = [...players].sort(() => Math.random() - 0.5)
   for (let i = 0; i < shuffled.length; i++) {
@@ -25,7 +32,6 @@ export async function POST(req: NextRequest) {
     phase: 'rolling',
     phase_data: {},
     properties: {},
-    orphanage: 0,
   })
   if (gsErr) return NextResponse.json({ error: gsErr.message }, { status: 500 })
 
