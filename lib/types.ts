@@ -27,8 +27,6 @@ export interface Player {
   position: number
   money: number
   children: number
-  in_jail: boolean
-  jail_turns: number
   is_bankrupt: boolean
   next_date_double: boolean
 }
@@ -37,12 +35,10 @@ export type GamePhase =
   | 'waiting'
   | 'rolling'
   | 'buy_property'
-  | 'pay_rent'
   | 'steal_option'
   | 'steal_waiting'
   | 'date_select'
   | 'date_rolling'
-  | 'card_effect'
   | 'end_turn'
   | 'finished'
 
@@ -108,7 +104,6 @@ export interface GameState {
   phase: GamePhase
   phase_data: PhaseData
   properties: Record<string, PropertyState>
-  orphanage: number
   updated_at: string
 }
 
