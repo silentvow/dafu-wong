@@ -132,6 +132,7 @@ export async function POST(req: NextRequest) {
 
   if (action === 'buy_property') {
     if (state.phase !== 'buy_property') return NextResponse.json({ error: 'wrong phase' }, { status: 400 })
+    if (state.current_player_id !== playerId) return NextResponse.json({ error: '不是你的回合' }, { status: 400 })
     const sq = BOARD[me.position]
     if (!sq.price) return NextResponse.json({ error: 'no price' }, { status: 400 })
     await updatePlayer(playerId, { money: me.money - sq.price })
@@ -143,12 +144,14 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'skip_buy') {
+    if (state.current_player_id !== playerId) return NextResponse.json({ error: '不是你的回合' }, { status: 400 })
     await updateState('end_turn', {})
     return NextResponse.json({ ok: true })
   }
 
   if (action === 'attempt_steal') {
     if (state.phase !== 'steal_option') return NextResponse.json({ error: 'wrong phase' }, { status: 400 })
+    if (state.current_player_id !== playerId) return NextResponse.json({ error: '不是你的回合' }, { status: 400 })
     const pd = state.phase_data
     const victim = players.find(p => p.id === pd.property_owner)
     if (!victim) return NextResponse.json({ error: '找不到受害者' }, { status: 400 })
@@ -166,6 +169,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'skip_steal') {
+    if (state.current_player_id !== playerId) return NextResponse.json({ error: '不是你的回合' }, { status: 400 })
     await updateState('end_turn', {})
     return NextResponse.json({ ok: true })
   }
