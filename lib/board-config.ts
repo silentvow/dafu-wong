@@ -9,21 +9,21 @@ export const BOARD: Square[] = [
   { id: 1,  type: 'property', name: '便利商店',        color: 'brown',    price: 1000, rent: [120,  300]  },
   { id: 2,  type: 'date',     name: '汽車旅館 💕',    description: '雙方各付 $500，擲骰高者得孩子' },
   { id: 3,  type: 'property', name: '早餐店',          color: 'brown',    price: 1200, rent: [150,  380]  },
-  { id: 4,  type: 'party',    name: '多人派對 🎉',      description: '主辦人失去50%金錢，所有玩家擲骰，點數最高者得孩子' },
+  { id: 4,  type: 'party',    name: '多人派對 🎉',      description: '主辦人失去50%金錢，所有玩家擲骰，偶數者得孩子' },
   { id: 5,  type: 'property', name: '小吃攤',          color: 'lightblue', price: 1500, rent: [180,  480]  },
   { id: 6,  type: 'fate',     name: '命運 🎴',         description: '抽命運卡' },
   { id: 7,  type: 'work',     name: '工作 💼',         description: '收入依孩子數計算' },
   // ── Right column (bottom → top) ──
   { id: 8,  type: 'property', name: '夜市',            color: 'lightblue', price: 1800, rent: [220,  560]  },
-  { id: 9,  type: 'hospital', name: '醫院 🏥',         description: '每個孩子繳 $200' },
+  { id: 9,  type: 'hospital', name: '醫院 🏥',         description: '每個孩子繳 $500' },
   { id: 10, type: 'property', name: '電影院',          color: 'pink',     price: 2100, rent: [260,  660]  },
   { id: 11, type: 'chance',   name: '機會 📦',         description: '抽機會卡' },
   { id: 12, type: 'date',     name: '汽車旅館 💕',    description: '雙方各付 $500，擲骰高者得孩子' },
   { id: 13, type: 'property', name: '補習班',          color: 'pink',     price: 2500, rent: [310,  780]  },
   // ── Top row (right → left) ──
-  { id: 14, type: 'work',     name: '工作 💼',         description: '收入依孩子數計算' },
+  { id: 14, type: 'paternity', name: '親子鑑定 🧬',      description: '花費 $2,000 指定有孩子的玩家，擲骰比大小，點數嚴格較大者搶走對方一個孩子' },
   { id: 15, type: 'property', name: '百貨公司',        color: 'yellow',   price: 2800, rent: [350,  880]  },
-  { id: 16, type: 'party',    name: '多人派對 🎉',      description: '主辦人失去50%金錢，所有玩家擲骰，點數最高者得孩子' },
+  { id: 16, type: 'party',    name: '多人派對 🎉',      description: '主辦人失去50%金錢，所有玩家擲骰，偶數者得孩子' },
   { id: 17, type: 'property', name: '購物中心',        color: 'yellow',   price: 3200, rent: [400, 1000]  },
   { id: 18, type: 'date',     name: '汽車旅館 💕',    description: '雙方各付 $500，擲骰高者得孩子' },
   { id: 19, type: 'fate',     name: '命運 🎴',         description: '抽命運卡' },
@@ -33,9 +33,9 @@ export const BOARD: Square[] = [
   { id: 22, type: 'property', name: '金融中心',        color: 'green',    price: 3200, rent: [480, 1200]  },
   { id: 23, type: 'chance',   name: '機會 📦',         description: '抽機會卡' },
   { id: 24, type: 'date',     name: '汽車旅館 💕',    description: '雙方各付 $500，擲骰高者得孩子' },
-  { id: 25, type: 'hospital', name: '醫院 🏥',         description: '每個孩子繳 $200' },
+  { id: 25, type: 'hospital', name: '醫院 🏥',         description: '每個孩子繳 $500' },
   { id: 26, type: 'property', name: '科技園區',        color: 'green',    price: 3500, rent: [500, 1250]  },
-  { id: 27, type: 'fate',     name: '命運 🎴',         description: '抽命運卡' },
+  { id: 27, type: 'paternity', name: '親子鑑定 🧬',      description: '花費 $2,000 指定有孩子的玩家，擲骰比大小，點數嚴格較大者搶走對方一個孩子' },
 ]
 
 // Color groups — owning all properties in a group gives full rent (rent[1])
@@ -57,9 +57,9 @@ export const SALARY_CHILD_BONUS = 600 // extra per child below WIN_CHILDREN
 export const WORK_BONUS      = 500    // base work income (at 5 children)
 export const WORK_CHILD_BONUS = 200   // extra per child below WIN_CHILDREN
 export const TAX_AMOUNT      = 500
-export const HOSPITAL_PER_CHILD = 200
+export const HOSPITAL_PER_CHILD = 500
 export const DATE_FEE        = 1000
-export const STEAL_COST      = 2000
+export const PATERNITY_COST  = 2000
 
 /** Salary received when passing/returning to start, scaled by children count */
 export function calcSalary(children: number): number {

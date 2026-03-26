@@ -8,6 +8,7 @@ export type SquareType =
   | 'tax'
   | 'work'
   | 'party'
+  | 'paternity'
 
 export interface Square {
   id: number
@@ -36,8 +37,8 @@ export type GamePhase =
   | 'waiting'
   | 'rolling'
   | 'buy_property'
-  | 'steal_option'
-  | 'steal_rolling'
+  | 'paternity_select'
+  | 'paternity_rolling'
   | 'date_select'
   | 'date_rolling'
   | 'party_rolling'
@@ -47,16 +48,6 @@ export type GamePhase =
 export interface PhaseData {
   dice?: number
   landed_square?: number
-
-  // property
-  property_owner?: string | null
-  rent_amount?: number
-
-  // steal
-  thief_id?: string
-  victim_id?: string
-  thief_roll?: number
-  victim_roll?: number
 
   // date
   initiator_id?: string
@@ -71,6 +62,12 @@ export interface PhaseData {
   // party
   host_id?: string
   party_rolls?: Record<string, number>
+
+  // paternity
+  attacker_id?: string
+  target_id?: string
+  attacker_roll?: number
+  target_roll?: number
 
   // winner
   winner_id?: string

@@ -4,7 +4,7 @@ import {
 import {
   BOARD, COLOR_GROUPS, TOTAL_SQUARES, WIN_CHILDREN,
   SALARY, TAX_AMOUNT, HOSPITAL_PER_CHILD,
-  DATE_FEE, STEAL_COST,
+  DATE_FEE,
   CHANCE_CARDS, FATE_CARDS, GameCard,
   calcSalary,
 } from './board-config'
