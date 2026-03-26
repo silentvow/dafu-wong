@@ -1,9 +1,10 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Player, GameState, GameLog } from '@/lib/types'
-import { BOARD, WIN_CHILDREN, STEAL_COST } from '@/lib/board-config'
+import { BOARD, WIN_CHILDREN, STEAL_COST, DATE_FEE } from '@/lib/board-config'
 
 const KEY_MOMENT_KEYWORDS = ['搶走', '瘟疫', '天降地契', '人口販運', '獲勝']
+const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
 
 function Confetti() {
   const pieces = Array.from({ length: 40 }, (_, i) => ({
@@ -36,7 +37,6 @@ function Confetti() {
 }
 
 function DiceDisplay({ rolling, value }: { rolling: boolean; value?: number }) {
-  const faces = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
   if (rolling) {
     return (
       <div className="flex gap-2 justify-center my-2">
@@ -47,12 +47,102 @@ function DiceDisplay({ rolling, value }: { rolling: boolean; value?: number }) {
   if (value) {
     return (
       <div className="flex gap-2 justify-center my-2">
-        <span className="text-3xl">{faces[value]}</span>
+        <span className="text-3xl">{DICE_FACES[value]}</span>
         <span className="text-lg font-bold text-amber-700 self-center">= {value}</span>
       </div>
     )
   }
   return null
+}
+
+// Banner shown after rolling: dice result + destination square
+function DiceBanner({ dice, squareName }: { dice: number; squareName: string }) {
+  return (
+    <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">
+      <span className="text-3xl leading-none">{DICE_FACES[dice]}</span>
+      <div className="min-w-0">
+        <div className="text-xs text-amber-600">擲出 {dice} 點</div>
+        <div className="font-bold text-amber-800 text-sm truncate">→ {squareName}</div>
+      </div>
+    </div>
+  )
+}
+
+// Compact recap of current-turn log entries
+function TurnRecap({ logs }: { logs: GameLog[] }) {
+  if (logs.length === 0) return null
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3">
+      <div className="text-xs font-bold text-gray-500 mb-1.5">📋 本回合</div>
+      <div className="flex flex-col gap-0.5">
+        {logs.map(l => (
+          <p key={l.id} className="text-xs text-gray-600 leading-relaxed">{l.message}</p>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// VS dice panel for steal/date rolling — shows both players' rolls prominently
+function VsPanel({
+  leftLabel,
+  leftColor,
+  leftRoll,
+  rightLabel,
+  rightColor,
+  rightRoll,
+  leftTag,
+  rightTag,
+  accentColor,
+}: {
+  leftLabel: string
+  leftColor?: string
+  leftRoll?: number
+  rightLabel: string
+  rightColor?: string
+  rightRoll?: number
+  leftTag?: string
+  rightTag?: string
+  accentColor: string
+}) {
+  const bothRolled = leftRoll !== undefined && rightRoll !== undefined
+  const leftWins = bothRolled && leftRoll! > rightRoll!
+  const rightWins = bothRolled && rightRoll! > leftRoll!
+
+  return (
+    <div className="flex items-stretch gap-2 mb-3">
+      {/* Left */}
+      <div className={`flex-1 rounded-xl p-3 text-center border-2 transition ${leftWins ? 'border-green-400 bg-green-50' : rightWins ? 'border-gray-200 bg-gray-50 opacity-70' : 'border-gray-200 bg-gray-50'}`}>
+        <div className="text-xs font-medium mb-1 truncate" style={{ color: leftColor }}>{leftLabel}</div>
+        {leftTag && <div className={`text-xs mb-1 ${accentColor === 'red' ? 'text-red-500' : 'text-pink-500'}`}>{leftTag}</div>}
+        <div className="text-4xl font-bold text-gray-800 leading-none my-1">
+          {leftRoll !== undefined ? DICE_FACES[leftRoll] : '🎲'}
+        </div>
+        {leftRoll !== undefined && (
+          <div className="text-lg font-bold text-gray-700">{leftRoll}</div>
+        )}
+        {leftWins && <div className="text-xs text-green-600 font-bold mt-1">✓ 勝</div>}
+      </div>
+
+      {/* VS */}
+      <div className="flex items-center justify-center px-1">
+        <span className="text-sm font-bold text-gray-400">VS</span>
+      </div>
+
+      {/* Right */}
+      <div className={`flex-1 rounded-xl p-3 text-center border-2 transition ${rightWins ? 'border-green-400 bg-green-50' : leftWins ? 'border-gray-200 bg-gray-50 opacity-70' : 'border-gray-200 bg-gray-50'}`}>
+        <div className="text-xs font-medium mb-1 truncate" style={{ color: rightColor }}>{rightLabel}</div>
+        {rightTag && <div className="text-xs mb-1 text-gray-400">{rightTag}</div>}
+        <div className="text-4xl font-bold text-gray-800 leading-none my-1">
+          {rightRoll !== undefined ? DICE_FACES[rightRoll] : '🎲'}
+        </div>
+        {rightRoll !== undefined && (
+          <div className="text-lg font-bold text-gray-700">{rightRoll}</div>
+        )}
+        {rightWins && <div className="text-xs text-green-600 font-bold mt-1">✓ 勝</div>}
+      </div>
+    </div>
+  )
 }
 
 interface Props {
@@ -73,7 +163,21 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
   const isMyTurn = state.current_player_id === myId
   const pd = state.phase_data
 
-  // Detect if current player might be offline (no state change in 60s)
+  // Logs belonging to the current turn (after the last "輪到 X 了" separator)
+  const turnLogs = useMemo(() => {
+    const allLogs = logs ?? []
+    if (allLogs.length === 0) return []
+    let startIdx = 0
+    for (let i = allLogs.length - 1; i >= 0; i--) {
+      if (allLogs[i].message.includes('出手了')) {
+        startIdx = i + 1
+        break
+      }
+    }
+    return allLogs.slice(startIdx)
+  }, [logs])
+
+  // Detect if current player might be offline
   const [showSkip, setShowSkip] = useState(false)
   useEffect(() => {
     setShowSkip(false)
@@ -84,9 +188,8 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
     }
   }, [state.updated_at, isMyTurn, state.phase])
 
-
   async function act(action: string, data?: Record<string, unknown>) {
-    if (action === 'roll') {
+    if (action === 'roll' || action === 'party_roll') {
       setDiceRolling(true)
       await new Promise(r => setTimeout(r, 900))
     }
@@ -185,14 +288,34 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
 
   // ── BUY PROPERTY ──
   if (state.phase === 'buy_property') {
+    const diceResult = pd.dice as number | undefined
+    const squareName = BOARD[currentPlayer?.position ?? me?.position ?? 0]?.name ?? ''
+    if (!isMyTurn) {
+      return (
+        <div className="bg-white rounded-2xl p-4 shadow">
+          {diceResult && <DiceBanner dice={diceResult} squareName={squareName} />}
+          <div className="text-center text-gray-400 text-sm">{currentPlayer?.name} 決定是否購買...</div>
+        </div>
+      )
+    }
     const sq = BOARD[me?.position ?? 0]
-    if (!isMyTurn) return <div className="bg-white rounded-2xl p-4 text-center text-gray-400 shadow">{currentPlayer?.name} 決定是否購買...</div>
+    const canAfford = (me?.money ?? 0) >= (sq.price ?? 0)
     return (
       <div className="bg-white rounded-2xl p-4 shadow">
+        {diceResult && <DiceBanner dice={diceResult} squareName={squareName} />}
         <p className="font-bold text-center mb-1">{sq.name}</p>
-        <p className="text-center text-gray-500 text-sm mb-3">售價 <span className="font-bold text-amber-700">${sq.price}</span>（你有 ${me?.money?.toLocaleString()}）</p>
+        <p className="text-center text-gray-500 text-sm mb-3">
+          售價 <span className="font-bold text-amber-700">${sq.price}</span>（你有 ${me?.money?.toLocaleString()}）
+        </p>
+        {!canAfford && <p className="text-center text-red-500 text-xs mb-2">💸 金錢不足，無法購買</p>}
         <div className="flex gap-2">
-          {btn(`💰 購買 $${sq.price}`, 'buy_property', undefined, 'flex-1 bg-green-500 hover:bg-green-600')}
+          <button
+            onClick={() => act('buy_property')}
+            disabled={loading || !canAfford}
+            className="flex-1 px-4 py-2 rounded-xl font-bold text-white transition disabled:opacity-40 bg-green-500 hover:bg-green-600"
+          >
+            {loading ? '...' : `💰 購買 $${sq.price}`}
+          </button>
           {btn('⏭ 跳過', 'skip_buy', undefined, 'flex-1 bg-gray-400 hover:bg-gray-500')}
         </div>
       </div>
@@ -202,10 +325,28 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
   // ── STEAL OPTION ──
   if (state.phase === 'steal_option') {
     const owner = players.find(p => p.id === pd.property_owner)
-    if (!isMyTurn) return <div className="bg-white rounded-2xl p-4 text-center text-gray-400 shadow">{currentPlayer?.name} 考慮是否搶奪...</div>
+    const diceResult = pd.dice as number | undefined
+    const squareName = BOARD[currentPlayer?.position ?? me?.position ?? 0]?.name ?? ''
+    const rentAmount = pd.rent_amount as number | undefined
+
+    if (!isMyTurn) {
+      return (
+        <div className="bg-white rounded-2xl p-4 shadow">
+          {diceResult && <DiceBanner dice={diceResult} squareName={squareName} />}
+          {rentAmount !== undefined && (
+            <p className="text-xs text-center text-gray-500 mb-2">已付租金 ${rentAmount}</p>
+          )}
+          <div className="text-center text-gray-400 text-sm">{currentPlayer?.name} 考慮是否搶奪...</div>
+        </div>
+      )
+    }
     if (!owner || owner.children === 0) return <div className="bg-white rounded-2xl p-4 text-center text-gray-400 shadow">等待...</div>
     return (
       <div className="bg-white rounded-2xl p-4 shadow">
+        {diceResult && <DiceBanner dice={diceResult} squareName={squareName} />}
+        {rentAmount !== undefined && (
+          <p className="text-xs text-center text-red-500 mb-2">已付租金 ${rentAmount} 給 {owner.name}</p>
+        )}
         <p className="font-bold text-center mb-1">😈 搶奪孩子？</p>
         <p className="text-gray-500 text-sm text-center mb-3">
           {owner.name} 有 {owner.children} 個孩子。<br />
@@ -227,22 +368,31 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
     const isVictim = pd.victim_id === myId
     const inSteal = isThief || isVictim
     const myRollDone = (isThief && pd.thief_roll !== undefined) || (isVictim && pd.victim_roll !== undefined)
+    const bothRolled = pd.thief_roll !== undefined && pd.victim_roll !== undefined
+    const thiefWins = bothRolled && (pd.thief_roll as number) > (pd.victim_roll as number)
+
     return (
-      <div className="bg-white rounded-2xl p-4 shadow text-center">
-        <p className="font-bold text-red-600 mb-2">😈 搶奪擲骰！</p>
-        <div className="flex justify-around mb-3">
-          <div>
-            <div className="font-medium text-sm" style={{ color: thief?.color }}>{thief?.name}（搶）</div>
-            <div className="text-xl">{pd.thief_roll ?? '🎲'}</div>
-          </div>
-          <div className="text-xl self-center">VS</div>
-          <div>
-            <div className="font-medium text-sm" style={{ color: victim?.color }}>{victim?.name}（守）</div>
-            <div className="text-xl">{pd.victim_roll ?? '🎲'}</div>
-          </div>
-        </div>
+      <div className="bg-white rounded-2xl p-4 shadow">
+        <p className="font-bold text-red-600 text-center mb-3">😈 搶奪擲骰！</p>
+        <VsPanel
+          leftLabel={thief?.name ?? ''}
+          leftColor={thief?.color}
+          leftRoll={pd.thief_roll as number | undefined}
+          leftTag="搶方"
+          rightLabel={victim?.name ?? ''}
+          rightColor={victim?.color}
+          rightRoll={pd.victim_roll as number | undefined}
+          rightTag="守方"
+          accentColor="red"
+        />
+        {bothRolled && (
+          <p className={`text-center font-bold text-sm mb-3 ${thiefWins ? 'text-red-600' : 'text-gray-600'}`}>
+            {thiefWins ? `😈 ${thief?.name} 搶奪成功！` : `😅 ${thief?.name} 搶奪失敗！`}
+          </p>
+        )}
         {inSteal && !myRollDone && btn('🎲 擲骰！', 'steal_roll', undefined, 'w-full bg-red-500 hover:bg-red-600')}
-        {(!inSteal || myRollDone) && <p className="text-gray-400 text-sm">等待對方擲骰...</p>}
+        {(!inSteal || myRollDone) && !bothRolled && <p className="text-gray-400 text-sm text-center">等待對方擲骰...</p>}
+        {bothRolled && !inSteal && <p className="text-gray-400 text-sm text-center">結算中...</p>}
       </div>
     )
   }
@@ -250,26 +400,41 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
   // ── DATE SELECT ──
   if (state.phase === 'date_select') {
     const others = players.filter(p => p.id !== state.current_player_id && !p.is_bankrupt)
+    const diceResult = pd.dice as number | undefined
+
     if (!isMyTurn) {
-      return <div className="bg-white rounded-2xl p-4 text-center text-gray-400 shadow">{currentPlayer?.name} 正在選約會對象...</div>
+      return (
+        <div className="bg-white rounded-2xl p-4 shadow">
+          {diceResult && <DiceBanner dice={diceResult} squareName="汽車旅館" />}
+          <div className="text-center text-gray-400 text-sm">{currentPlayer?.name} 正在選約會對象...</div>
+        </div>
+      )
     }
+    const myMoney = me?.money ?? 0
+    const canAffordDate = myMoney >= DATE_FEE
     return (
       <div className="bg-white rounded-2xl p-4 shadow">
+        {diceResult && <DiceBanner dice={diceResult} squareName="汽車旅館 💕" />}
         <p className="font-bold text-center text-pink-600 mb-1">💕 選擇約會對象</p>
-        <p className="text-xs text-center text-gray-400 mb-3">雙方各付 $500，擲骰高者得孩子</p>
+        <p className="text-xs text-center text-gray-400 mb-3">發起者付 ${DATE_FEE}，擲骰高者得孩子</p>
+        {!canAffordDate && <p className="text-center text-red-500 text-xs mb-2">💸 金錢不足（需 ${DATE_FEE}），無法約會</p>}
         <div className="flex flex-col gap-2">
-          {others.map(p => (
-            <button
-              key={p.id}
-              onClick={() => act('pick_date_partner', { partnerId: p.id })}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-pink-200 hover:border-pink-400 hover:bg-pink-50 transition"
-            >
-              <div className="w-6 h-6 rounded-full" style={{ backgroundColor: p.color }} />
-              <span className="font-medium">{p.name}</span>
-              <span className="ml-auto text-xs text-gray-400">💰${p.money.toLocaleString()} 👶{p.children}</span>
-            </button>
-          ))}
+          {others.map(p => {
+            const disabled = loading || !canAffordDate
+            return (
+              <button
+                key={p.id}
+                onClick={() => act('pick_date_partner', { partnerId: p.id })}
+                disabled={disabled}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-pink-200 hover:border-pink-400 hover:bg-pink-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <div className="w-6 h-6 rounded-full" style={{ backgroundColor: p.color }} />
+                <span className="font-medium">{p.name}</span>
+                <span className="ml-auto text-xs text-gray-400">💰${p.money.toLocaleString()} 👶{p.children}</span>
+              </button>
+            )
+          })}
+          {btn('💔 放棄配對', 'skip_date', undefined, 'mt-1 bg-gray-400 hover:bg-gray-500 text-sm')}
         </div>
       </div>
     )
@@ -282,32 +447,99 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
     const myRollDone = (pd.initiator_id === myId && pd.initiator_roll !== undefined) ||
                        (pd.partner_id === myId && pd.partner_roll !== undefined)
     const inDate = pd.initiator_id === myId || pd.partner_id === myId
+    const bothRolled = pd.initiator_roll !== undefined && pd.partner_roll !== undefined
+    const initiatorWins = bothRolled && (pd.initiator_roll as number) >= (pd.partner_roll as number)
 
     return (
-      <div className="bg-white rounded-2xl p-4 shadow text-center">
-        <p className="font-bold text-pink-600 mb-2">💕 約會擲骰！</p>
-        <div className="flex justify-around mb-3">
-          <div>
-            <div className="font-medium text-sm" style={{ color: initiator?.color }}>{initiator?.name}</div>
-            <div className="text-xl">{pd.initiator_roll ?? '🎲'}</div>
-          </div>
-          <div className="text-xl self-center">VS</div>
-          <div>
-            <div className="font-medium text-sm" style={{ color: partner?.color }}>{partner?.name}</div>
-            <div className="text-xl">{pd.partner_roll ?? '🎲'}</div>
-          </div>
-        </div>
+      <div className="bg-white rounded-2xl p-4 shadow">
+        <p className="font-bold text-pink-600 text-center mb-3">💕 約會擲骰！</p>
+        <VsPanel
+          leftLabel={initiator?.name ?? ''}
+          leftColor={initiator?.color}
+          leftRoll={pd.initiator_roll as number | undefined}
+          rightLabel={partner?.name ?? ''}
+          rightColor={partner?.color}
+          rightRoll={pd.partner_roll as number | undefined}
+          accentColor="pink"
+        />
+        {bothRolled && (
+          <p className="text-center font-bold text-sm text-pink-600 mb-3">
+            {initiatorWins
+              ? `💕 ${initiator?.name} 得到孩子！`
+              : `💕 ${partner?.name} 得到孩子！`}
+          </p>
+        )}
         {inDate && !myRollDone && btn('🎲 擲骰！', 'date_roll', undefined, 'w-full bg-pink-500 hover:bg-pink-600')}
-        {(!inDate || myRollDone) && <p className="text-gray-400 text-sm">等待對方擲骰...</p>}
+        {(!inDate || myRollDone) && !bothRolled && <p className="text-gray-400 text-sm text-center">等待對方擲骰...</p>}
+        {bothRolled && !inDate && <p className="text-gray-400 text-sm text-center">結算中...</p>}
+      </div>
+    )
+  }
+
+  // ── PARTY ROLLING ──
+  if (state.phase === 'party_rolling') {
+    const host = players.find(p => p.id === pd.host_id)
+    const partyRolls = (pd.party_rolls ?? {}) as Record<string, number>
+    const activePlayers = players.filter(p => !p.is_bankrupt)
+    const myRollDone = partyRolls[myId] !== undefined
+    const maxRoll = Object.values(partyRolls).length > 0
+      ? Math.max(...Object.values(partyRolls))
+      : 0
+
+    return (
+      <div className="bg-white rounded-2xl p-4 shadow">
+        <p className="font-bold text-yellow-600 text-center mb-1">🎉 多人派對！</p>
+        <p className="text-xs text-center text-gray-400 mb-3">
+          {host?.name} 舉辦派對，點數最高者得孩子！
+        </p>
+        <div className="flex flex-col gap-1.5 mb-3">
+          {activePlayers.map(p => {
+            const roll = partyRolls[p.id]
+            const isWinner = roll !== undefined && roll === maxRoll && Object.values(partyRolls).length === activePlayers.length
+            return (
+              <div key={p.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${isWinner ? 'border-yellow-400 bg-yellow-50' : 'border-gray-100 bg-gray-50'}`}>
+                <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+                <span className="text-sm font-medium flex-1">{p.name}</span>
+                {roll !== undefined
+                  ? <span className="text-lg">{DICE_FACES[roll]}<span className="text-sm font-bold ml-1">{roll}</span></span>
+                  : <span className="text-gray-300 text-sm">🎲 等待中...</span>
+                }
+                {isWinner && <span className="text-xs text-yellow-600 font-bold">🏆</span>}
+              </div>
+            )
+          })}
+        </div>
+        {!myRollDone
+          ? btn('🎲 擲骰子！', 'party_roll', undefined, 'w-full bg-yellow-500 hover:bg-yellow-600')
+          : Object.keys(partyRolls).length < activePlayers.length && (
+            <p className="text-gray-400 text-sm text-center">等待其他玩家擲骰...</p>
+          )
+        }
       </div>
     )
   }
 
   // ── END TURN ──
   if (state.phase === 'end_turn') {
-    if (!isMyTurn) return <div className="bg-white rounded-2xl p-4 text-center text-gray-400 shadow">等待 {currentPlayer?.name} 結束回合...</div>
+    if (!isMyTurn) {
+      return (
+        <div className="bg-white rounded-2xl p-4 shadow">
+          <TurnRecap logs={turnLogs} />
+          <div className="text-center text-gray-400 text-sm">
+            等待 <span className="font-bold" style={{ color: currentPlayer?.color }}>{currentPlayer?.name}</span> 結束回合...
+          </div>
+          {showSkip && (
+            <div className="mt-2 p-2 bg-orange-50 rounded-xl border border-orange-200">
+              <p className="text-xs text-orange-600 mb-2">玩家可能已離線</p>
+              {btn('⏭ 跳過此玩家', 'end_turn', undefined, 'text-sm bg-orange-400 hover:bg-orange-500')}
+            </div>
+          )}
+        </div>
+      )
+    }
     return (
-      <div className="bg-white rounded-2xl p-4 shadow text-center">
+      <div className="bg-white rounded-2xl p-4 shadow">
+        <TurnRecap logs={turnLogs} />
         {btn('✅ 結束回合', 'end_turn', undefined, 'w-full bg-green-500 hover:bg-green-600')}
       </div>
     )

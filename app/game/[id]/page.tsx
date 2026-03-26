@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Player, GameState, GameLog } from '@/lib/types'
@@ -8,6 +8,13 @@ import PlayerPanel from '@/components/PlayerPanel'
 import ActionPanel from '@/components/ActionPanel'
 import EventLog from '@/components/EventLog'
 
+interface Toast {
+  id: number
+  message: string
+}
+
+let toastCounter = 0
+
 export default function GamePage() {
   const { id: roomId } = useParams<{ id: string }>()
   const router = useRouter()
@@ -15,6 +22,9 @@ export default function GamePage() {
   const [state, setState] = useState<GameState | null>(null)
   const [logs, setLogs] = useState<GameLog[]>([])
   const [myId, setMyId] = useState('')
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const prevLogIdsRef = useRef<Set<number>>(new Set())
+  const initialLoadRef = useRef(true)
 
   useEffect(() => {
     const pid = localStorage.getItem('playerId') ?? ''
@@ -25,12 +35,36 @@ export default function GamePage() {
     const [{ data: ps }, { data: gs }, { data: ls }] = await Promise.all([
       supabase.from('players').select().eq('room_id', roomId),
       supabase.from('game_state').select().eq('room_id', roomId).single(),
-      supabase.from('game_log').select().eq('room_id', roomId).order('id', { ascending: true }).limit(50),
+      supabase.from('game_log').select().eq('room_id', roomId).order('id', { ascending: false }).limit(50),
     ])
     if (ps) setPlayers(ps as Player[])
     if (gs) setState(gs as GameState)
-    if (ls) setLogs(ls as GameLog[])
+    if (ls) {
+      const ordered = (ls as GameLog[]).reverse()
+      setLogs(ordered)
+    }
   }, [roomId])
+
+  // Show toasts for new log entries
+  useEffect(() => {
+    if (logs.length === 0) return
+    if (initialLoadRef.current) {
+      // On first load, just record existing IDs — don't show toasts
+      prevLogIdsRef.current = new Set(logs.map(l => l.id))
+      initialLoadRef.current = false
+      return
+    }
+    const newEntries = logs.filter(l => !prevLogIdsRef.current.has(l.id))
+    if (newEntries.length === 0) return
+    newEntries.forEach(l => prevLogIdsRef.current.add(l.id))
+    const newToasts = newEntries.map(l => ({ id: ++toastCounter, message: l.message }))
+    setToasts(prev => [...prev, ...newToasts].slice(-4))
+    newToasts.forEach(t => {
+      setTimeout(() => {
+        setToasts(prev => prev.filter(x => x.id !== t.id))
+      }, 4000)
+    })
+  }, [logs])
 
   useEffect(() => {
     loadAll()
@@ -42,7 +76,9 @@ export default function GamePage() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_log' }, loadAll)
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    const poll = setInterval(loadAll, 2000)
+
+    return () => { supabase.removeChannel(channel); clearInterval(poll) }
   }, [roomId, loadAll])
 
   async function handleAction(action: string, data?: Record<string, unknown>) {
@@ -68,6 +104,17 @@ export default function GamePage() {
 
   return (
     <div className="min-h-screen p-3 md:p-4" style={{ background: 'var(--bg-page)' }}>
+      {/* Toast notifications */}
+      <div className="fixed top-4 left-4 z-50 flex flex-col gap-2 items-start pointer-events-none max-w-xs">
+        {toasts.map(t => (
+          <div
+            key={t.id}
+            className="bg-gray-800 text-white text-sm px-4 py-2 rounded-xl shadow-lg animate-fade-in-up"
+          >
+            {t.message}
+          </div>
+        ))}
+      </div>
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-3">

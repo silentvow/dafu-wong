@@ -48,7 +48,7 @@ export default function PlayerPanel({ players, state, myId }: Props) {
             <div className="mt-1.5 bg-gray-200 rounded-full h-1.5">
               <div
                 className="bg-pink-400 rounded-full h-1.5 transition-all"
-                style={{ width: `${(p.children / WIN_CHILDREN) * 100}%` }}
+                style={{ width: `${Math.min(p.children / WIN_CHILDREN * 100, 100)}%` }}
               />
             </div>
           </div>

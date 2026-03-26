@@ -44,7 +44,9 @@ export default function RoomPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => load())
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    const poll = setInterval(load, 2000)
+
+    return () => { supabase.removeChannel(channel); clearInterval(poll) }
   }, [id, router])
 
   const isHost = players.length > 0 && players.sort((a, b) => a.turn_order - b.turn_order)[0]?.id === myId

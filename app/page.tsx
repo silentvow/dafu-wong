@@ -1,46 +1,54 @@
-'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
-  const router = useRouter()
-  const [name, setName] = useState('')
-  const [roomCode, setRoomCode] = useState('')
-  const [mode, setMode] = useState<'home' | 'join'>('home')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [roomCode, setRoomCode] = useState("");
+  const [mode, setMode] = useState<"home" | "join">("home");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function createRoom() {
-    if (!name.trim()) return setError('請輸入你的名字')
-    setLoading(true)
-    setError('')
-    const res = await fetch('/api/room/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    if (!name.trim()) return setError("請輸入你的名字");
+    setLoading(true);
+    setError("");
+    const res = await fetch("/api/room/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ playerName: name }),
-    })
-    const data = await res.json()
-    if (!res.ok) { setError(data.error); setLoading(false); return }
-    localStorage.setItem('playerId', data.playerId)
-    localStorage.setItem('playerName', name)
-    router.push(`/room/${data.roomId}`)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+      setLoading(false);
+      return;
+    }
+    localStorage.setItem("playerId", data.playerId);
+    localStorage.setItem("playerName", name);
+    router.push(`/room/${data.roomId}`);
   }
 
   async function joinRoom() {
-    if (!name.trim()) return setError('請輸入你的名字')
-    if (!roomCode.trim()) return setError('請輸入房間號碼')
-    setLoading(true)
-    setError('')
-    const res = await fetch('/api/room/join', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    if (!name.trim()) return setError("請輸入你的名字");
+    if (!roomCode.trim()) return setError("請輸入房間號碼");
+    setLoading(true);
+    setError("");
+    const res = await fetch("/api/room/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ playerName: name, roomId: roomCode }),
-    })
-    const data = await res.json()
-    if (!res.ok) { setError(data.error); setLoading(false); return }
-    localStorage.setItem('playerId', data.playerId)
-    localStorage.setItem('playerName', name)
-    router.push(`/room/${data.roomId}`)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+      setLoading(false);
+      return;
+    }
+    localStorage.setItem("playerId", data.playerId);
+    localStorage.setItem("playerName", name);
+    router.push(`/room/${data.roomId}`);
   }
 
   return (
@@ -48,22 +56,29 @@ export default function Home() {
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
         <div className="text-6xl mb-2">🤰</div>
         <h1 className="text-4xl font-bold text-amber-700 mb-1">大腹翁</h1>
-        <p className="text-gray-500 mb-4 text-sm">多人大富翁，比誰先生 5 個孩子！</p>
+        <p className="text-gray-500 mb-4 text-sm">最會生孩子的才是贏家！</p>
 
         {/* Game rules summary */}
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-6 text-left text-sm">
           <div className="grid grid-cols-1 gap-1.5">
             <div className="flex items-start gap-2">
               <span className="text-base leading-none mt-0.5">💕</span>
-              <span className="text-gray-600">落到<b>汽車旅館</b>→ 選人配對，擲骰高者得孩子</span>
+              <span className="text-gray-600">
+                落到<b>汽車旅館</b>→ 進行人與人的連結，擲骰高者得孩子
+              </span>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-base leading-none mt-0.5">😈</span>
-              <span className="text-gray-600">落到<b>對手地產</b>→ 花費 $1,500 搶奪，雙方擲骰比大小，搶奪方點數大才成功</span>
+              <span className="text-gray-600">
+                落到<b>對手地產</b>→
+                引誘對手孩子，擲骰比大小，引誘方點數大才成功
+              </span>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-base leading-none mt-0.5">🏆</span>
-              <span className="text-gray-600"><b>先達到 5 個孩子</b>的玩家獲勝！（2–8 人）</span>
+              <span className="text-gray-600">
+                <b>先擁有 5 個孩子通過起點</b>的玩家獲勝！（2–8 人）
+              </span>
             </div>
           </div>
         </div>
@@ -73,20 +88,22 @@ export default function Home() {
             className="w-full border-2 border-amber-200 rounded-xl px-4 py-3 text-center text-lg focus:outline-none focus:border-amber-400"
             placeholder="你的名字"
             value={name}
-            onChange={e => setName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && mode === 'home' && createRoom()}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) =>
+              e.key === "Enter" && mode === "home" && createRoom()
+            }
             maxLength={12}
           />
         </div>
 
-        {mode === 'join' && (
+        {mode === "join" && (
           <div className="mb-4">
             <input
               className="w-full border-2 border-amber-200 rounded-xl px-4 py-3 text-center text-lg tracking-widest uppercase focus:outline-none focus:border-amber-400"
               placeholder="房間號碼（6碼）"
               value={roomCode}
-              onChange={e => setRoomCode(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && joinRoom()}
+              onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === "Enter" && joinRoom()}
               maxLength={6}
             />
           </div>
@@ -94,17 +111,20 @@ export default function Home() {
 
         {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
 
-        {mode === 'home' ? (
+        {mode === "home" ? (
           <div className="flex flex-col gap-3">
             <button
               onClick={createRoom}
               disabled={loading}
               className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl text-lg transition disabled:opacity-50"
             >
-              {loading ? '建立中...' : '🏠 建立房間'}
+              {loading ? "建立中..." : "🏠 建立房間"}
             </button>
             <button
-              onClick={() => { setMode('join'); setError('') }}
+              onClick={() => {
+                setMode("join");
+                setError("");
+              }}
               className="w-full border-2 border-amber-300 text-amber-700 font-bold py-3 rounded-xl text-lg hover:bg-amber-50 transition"
             >
               🚪 加入房間
@@ -117,10 +137,13 @@ export default function Home() {
               disabled={loading}
               className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl text-lg transition disabled:opacity-50"
             >
-              {loading ? '加入中...' : '🚪 加入'}
+              {loading ? "加入中..." : "🚪 加入"}
             </button>
             <button
-              onClick={() => { setMode('home'); setError('') }}
+              onClick={() => {
+                setMode("home");
+                setError("");
+              }}
               className="text-gray-400 hover:text-gray-600 text-sm"
             >
               ← 返回
@@ -129,5 +152,5 @@ export default function Home() {
         )}
       </div>
     </div>
-  )
+  );
 }

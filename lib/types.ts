@@ -7,6 +7,7 @@ export type SquareType =
   | 'hospital'
   | 'tax'
   | 'work'
+  | 'party'
 
 export interface Square {
   id: number
@@ -39,6 +40,7 @@ export type GamePhase =
   | 'steal_rolling'
   | 'date_select'
   | 'date_rolling'
+  | 'party_rolling'
   | 'end_turn'
   | 'finished'
 
@@ -65,6 +67,10 @@ export interface PhaseData {
   // card
   card_text?: string
   card_effect?: CardEffect
+
+  // party
+  host_id?: string
+  party_rolls?: Record<string, number>
 
   // winner
   winner_id?: string

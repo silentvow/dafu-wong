@@ -6,6 +6,7 @@ import {
   SALARY, TAX_AMOUNT, HOSPITAL_PER_CHILD,
   DATE_FEE, STEAL_COST,
   CHANCE_CARDS, FATE_CARDS, GameCard,
+  calcSalary,
 } from './board-config'
 
 function randRange(min: number, max: number): number {
@@ -76,14 +77,14 @@ export function applyCardEffect(
     case 'gain_child':
       return {
         playerUpdates: { children: player.children + effect.amount },
-        logMessage: `${player.name} 得到 ${effect.amount} 個孩子！`,
+        logMessage: `🍼 ${player.name} 喜獲 ${effect.amount} 個孩子，家庭又壯大了！`,
         nextPhase: 'end_turn',
       }
 
     case 'lose_child':
       return {
         playerUpdates: { children: Math.max(0, player.children - effect.amount) },
-        logMessage: `${player.name} 失去了 ${effect.amount} 個孩子...`,
+        logMessage: `😢 ${player.name} 失去了 ${effect.amount} 個孩子，令人心碎...`,
         nextPhase: 'end_turn',
       }
 
@@ -93,7 +94,7 @@ export function applyCardEffect(
         : (effect.amount ?? 0)
       return {
         playerUpdates: { money: player.money - amt },
-        logMessage: `${player.name} 支付了 $${amt}`,
+        logMessage: `💸 ${player.name} 荷包大失血 $${amt}`,
         nextPhase: 'end_turn',
       }
     }
@@ -104,7 +105,7 @@ export function applyCardEffect(
         : (effect.amount ?? 0)
       return {
         playerUpdates: { money: player.money + amt },
-        logMessage: `${player.name} 獲得了 $${amt}`,
+        logMessage: `💰 ${player.name} 意外進帳 $${amt}，笑開懷！`,
         nextPhase: 'end_turn',
       }
     }
@@ -114,7 +115,7 @@ export function applyCardEffect(
       const gain = perChild * player.children
       return {
         playerUpdates: { money: player.money + gain },
-        logMessage: `${player.name} 每個孩子收紅包 $${perChild}，共 $${gain}`,
+        logMessage: `🧧 ${player.name} 每個孩子收到 $${perChild} 紅包，共進帳 $${gain}！`,
         nextPhase: 'end_turn',
       }
     }
@@ -124,7 +125,7 @@ export function applyCardEffect(
       const cost = perChild * player.children
       return {
         playerUpdates: { money: player.money - cost },
-        logMessage: `${player.name} 每個孩子付 $${perChild}，共 $${cost}`,
+        logMessage: `😩 ${player.name} 每個孩子花費 $${perChild}，荷包縮水 $${cost}！`,
         nextPhase: 'end_turn',
       }
     }
@@ -135,7 +136,7 @@ export function applyCardEffect(
       return {
         playerUpdates: { money: player.money + total },
         otherUpdates: others.map(p => ({ id: p.id, money: p.money - amt })),
-        logMessage: `${player.name} 孩子生日，向每位玩家收了 $${amt}，共 $${total}！`,
+        logMessage: `🎂 ${player.name} 的孩子慶生！向每位玩家各收 $${amt}，大豐收 $${total}！`,
         nextPhase: 'end_turn',
       }
     }
@@ -146,7 +147,7 @@ export function applyCardEffect(
       return {
         playerUpdates: { money: player.money - total },
         otherUpdates: others.map(p => ({ id: p.id, money: p.money + amt })),
-        logMessage: `${player.name} 破財消災，向每位玩家各付 $${amt}，共 $${total}`,
+        logMessage: `💸 ${player.name} 花錢消災，向每位玩家各付 $${amt}，共出血 $${total}`,
         nextPhase: 'end_turn',
       }
     }
@@ -155,7 +156,7 @@ export function applyCardEffect(
       if (player.children === 0) {
         return {
           playerUpdates: {},
-          logMessage: `${player.name} 沒有孩子可以出養...`,
+          logMessage: `${player.name} 膝下無子，無孩可送養，只能嘆氣...`,
           nextPhase: 'end_turn',
         }
       }
@@ -164,7 +165,7 @@ export function applyCardEffect(
           children: player.children - 1,
           money: player.money + effect.amount,
         },
-        logMessage: `${player.name} 的孩子被領養，得到 $${effect.amount}`,
+        logMessage: `${player.name} 忍痛送養一個孩子，領得 $${effect.amount}`,
         nextPhase: 'end_turn',
       }
     }
@@ -175,7 +176,7 @@ export function applyCardEffect(
           children: player.children + 1,
           money: player.money - effect.cost,
         },
-        logMessage: `${player.name} 花了 $${effect.cost} 領養了一個孩子！`,
+        logMessage: `🏠 ${player.name} 花了 $${effect.cost} 迎接新成員！恭喜得子！`,
         nextPhase: 'end_turn',
       }
 
@@ -183,23 +184,25 @@ export function applyCardEffect(
       // No jail in this board — no effect
       return {
         playerUpdates: {},
-        logMessage: `${player.name} 逃過一劫...`,
+        logMessage: `${player.name} 有驚無險，化險為夷！`,
         nextPhase: 'end_turn',
       }
 
-    case 'move_to_start':
+    case 'move_to_start': {
+      const salary = calcSalary(player.children)
       return {
-        playerUpdates: { position: 0, money: player.money + SALARY },
-        logMessage: `${player.name} 回到起點，領了 $${SALARY}`,
+        playerUpdates: { position: 0, money: player.money + salary },
+        logMessage: `${player.name} 直奔起點，薪水入袋 $${salary}（${player.children} 個孩子）`,
         nextPhase: 'end_turn',
         teleportTo: 0,
       }
+    }
 
     case 'move_to_date': {
       const dest = nearestDateSquare(player.position)
       return {
         playerUpdates: { position: dest },
-        logMessage: `${player.name} 前進到最近的汽車旅館！`,
+        logMessage: `💞 ${player.name} 心動難耐，直衝汽車旅館！`,
         nextPhase: 'end_turn', // caller may override to date_select
         teleportTo: dest,
       }
@@ -208,7 +211,7 @@ export function applyCardEffect(
     case 'next_date_double':
       return {
         playerUpdates: { next_date_double: true },
-        logMessage: `${player.name} 下次約會可得雙胞胎！`,
+        logMessage: `✨ ${player.name} 下次約會藥效加倍，有望雙喜臨門！`,
         nextPhase: 'end_turn',
       }
 
@@ -217,7 +220,7 @@ export function applyCardEffect(
       if (withChildren.length === 0) {
         return {
           playerUpdates: { money: player.money - effect.amount },
-          logMessage: `${player.name} 外遇失敗，沒人有孩子可偷...（付了 $${effect.amount}）`,
+          logMessage: `${player.name} 想外遇，奈何所有人膝下空空，白花 $${effect.amount}`,
           nextPhase: 'end_turn',
         }
       }
@@ -228,7 +231,7 @@ export function applyCardEffect(
           money: player.money - effect.amount,
         },
         otherUpdates: [{ id: victim.id, children: victim.children - 1 }],
-        logMessage: `${player.name} 外遇，從 ${victim.name} 搶走了一個孩子！（付了 $${effect.amount}）`,
+        logMessage: `😏 ${player.name} 外遇得逞！從 ${victim.name} 帶走了一個孩子（花了 $${effect.amount}）`,
         nextPhase: 'end_turn',
       }
     }
@@ -239,7 +242,7 @@ export function applyCardEffect(
       if (eligible.length === 0) {
         return {
           playerUpdates: { money: player.money + 1000 },
-          logMessage: `${player.name} 天降地契找不到地產，改得 $1,000`,
+          logMessage: `${player.name} 天降地契，卻無地可得，改收 $1,000 補償金`,
           nextPhase: 'end_turn',
         }
       }
@@ -247,8 +250,8 @@ export function applyCardEffect(
       const sq = BOARD[picked]
       const prevOwner = state.properties[picked]?.owner_id
       const msg = prevOwner
-        ? `${player.name} 天降地契！搶走了 ${sq.name}（原主人的地產被搶走了）`
-        : `${player.name} 天降地契！獲得了無主的 ${sq.name}`
+        ? `🏠 ${player.name} 天降地契！強佔了 ${sq.name}，原主人哭了`
+        : `🏠 ${player.name} 天降地契！喜獲無主的 ${sq.name}，免費入手！`
       return {
         playerUpdates: {},
         propertiesUpdate: { [picked]: { owner_id: player.id, houses: 0 } },
@@ -265,7 +268,7 @@ export function applyCardEffect(
       if (ownedIds.length === 0) {
         return {
           playerUpdates: {},
-          logMessage: `${player.name} 天災，但沒有地產可失去`,
+          logMessage: `${player.name} 遭逢天災，所幸名下無地，有驚無險`,
           nextPhase: 'end_turn',
         }
       }
@@ -274,25 +277,32 @@ export function applyCardEffect(
       return {
         playerUpdates: {},
         propertiesUpdate: { [picked]: null },
-        logMessage: `${player.name} 天災！${sq.name} 變回無主地！`,
+        logMessage: `💥 ${player.name} 天災橫禍！${sq.name} 化為無主之地！`,
         nextPhase: 'end_turn',
       }
     }
 
     case 'steal_child_random': {
-      const withChildren = others.filter(p => p.children > 0)
-      if (withChildren.length === 0) {
+      // Always pick from all others — name the target even if they have no children
+      if (others.length === 0) {
         return {
           playerUpdates: {},
-          logMessage: '人口販運，但沒有目標（所有玩家沒有孩子）',
+          logMessage: '人口販運出動，但場上無其他玩家，無功而返',
           nextPhase: 'end_turn',
         }
       }
-      const victim = withChildren[Math.floor(Math.random() * withChildren.length)]
+      const victim = others[Math.floor(Math.random() * others.length)]
+      if (victim.children === 0) {
+        return {
+          playerUpdates: {},
+          logMessage: `人口販運鎖定了 ${victim.name}，但他名下無一孩童，此次落空`,
+          nextPhase: 'end_turn',
+        }
+      }
       return {
         playerUpdates: {},
         otherUpdates: [{ id: victim.id, children: Math.max(0, victim.children - 1) }],
-        logMessage: `人口販運！${victim.name} 失去了一個孩子（孩子消失了）`,
+        logMessage: `😱 人口販運！${victim.name} 痛失一個孩子，就此消失無蹤...`,
         nextPhase: 'end_turn',
       }
     }
@@ -302,7 +312,7 @@ export function applyCardEffect(
       return {
         playerUpdates: { children: newChildren },
         otherUpdates: others.map(p => ({ id: p.id, children: Math.max(0, p.children - 1) })),
-        logMessage: '瘟疫！所有玩家各失去一個孩子 😷',
+        logMessage: '☠️ 瘟疫蔓延！所有玩家各失去一個孩子',
         nextPhase: 'end_turn',
       }
     }
@@ -311,7 +321,7 @@ export function applyCardEffect(
       return {
         playerUpdates: { children: player.children + 1 },
         otherUpdates: others.map(p => ({ id: p.id, children: p.children + 1 })),
-        logMessage: '嬰兒潮！所有玩家各得一個孩子 👶',
+        logMessage: '🍼 嬰兒潮來襲！所有玩家各喜得一子',
         nextPhase: 'end_turn',
       }
 
@@ -352,14 +362,16 @@ export function resolveDateRoll(
   message: string
 } {
   if (initiatorRoll === partnerRoll) {
-    return { winnerId: null, childrenGained: 0, message: '平手！白費感情，沒有孩子 😅' }
+    return { winnerId: null, childrenGained: 0, message: '平手！兩人棋逢敵手，無緣結果 😅' }
   }
   const winnerId = initiatorRoll > partnerRoll ? initiatorId : partnerId
   const childrenGained = winnerId === initiatorId && initiatorHasDouble ? 2 : 1
   return {
     winnerId,
     childrenGained,
-    message: `${initiatorRoll > partnerRoll ? '發起者' : '被選者'}獲得孩子！（${initiatorRoll} vs ${partnerRoll}）`,
+    message: initiatorRoll > partnerRoll
+      ? `發起者以 ${initiatorRoll} 對 ${partnerRoll} 勝出！`
+      : `被選者以 ${partnerRoll} 對 ${initiatorRoll} 反制勝出！`,
   }
 }
 

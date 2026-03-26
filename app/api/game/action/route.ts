@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import {
   rollDice, movePlayer, calcRent, applyCardEffect,
-  nextPlayerIndex, checkWin, resolveDateRoll, randomCard,
+  nextPlayerIndex, resolveDateRoll, randomCard,
 } from '@/lib/game-engine'
 import {
-  BOARD, SALARY, TAX_AMOUNT, HOSPITAL_PER_CHILD, WORK_BONUS,
+  BOARD, SALARY, HOSPITAL_PER_CHILD,
   DATE_FEE, STEAL_COST, WIN_CHILDREN,
   CHANCE_CARDS, FATE_CARDS,
+  calcSalary, calcWorkBonus,
 } from '@/lib/board-config'
 import { Player, GameState, PhaseData, PropertyState } from '@/lib/types'
 
@@ -19,7 +20,9 @@ type ActionType =
   | 'skip_steal'
   | 'steal_roll'
   | 'pick_date_partner'
+  | 'skip_date'
   | 'date_roll'
+  | 'party_roll'
   | 'end_turn'
 
 async function log(db: ReturnType<typeof createServerClient>, roomId: string, message: string) {
@@ -62,17 +65,12 @@ export async function POST(req: NextRequest) {
   async function endTurn() {
     const fresh = await db.from('players').select().eq('room_id', roomId)
     const freshPlayers = (fresh.data ?? []) as Player[]
-    const winner = checkWin(freshPlayers)
-    if (winner) {
-      await db.from('game_state').update({
-        phase: 'finished',
-        phase_data: { winner_id: winner.id },
-        updated_at: new Date().toISOString(),
-      }).eq('room_id', roomId)
-      await db.from('rooms').update({ status: 'finished', winner_id: winner.id }).eq('id', roomId)
-      await log(db, roomId, `🏆 ${winner.name} 達到 ${winner.children} 個孩子，獲勝！`)
-      return
+
+    // Near-win warning: someone has enough children but hasn't passed start yet
+    for (const p of freshPlayers.filter(p => !p.is_bankrupt && p.children >= WIN_CHILDREN)) {
+      await log(db, roomId, `⚠️ ${p.name} 已集齊 ${p.children} 個孩子！只差一步——再經過起點，王者加冕！`)
     }
+
     const nextId = nextPlayerIndex(freshPlayers, state.current_player_id!)
     const nextPlayer = freshPlayers.find(p => p.id === nextId)!
     const nextTurn = nextId === state.current_player_id
@@ -85,7 +83,7 @@ export async function POST(req: NextRequest) {
       phase_data: {},
       updated_at: new Date().toISOString(),
     }).eq('room_id', roomId)
-    await log(db, roomId, `輪到 ${nextPlayer.name} 了`)
+    await log(db, roomId, `⏭️ 換 ${nextPlayer.name} 出手了！`)
   }
 
   // ── ACTIONS ──
@@ -99,29 +97,29 @@ export async function POST(req: NextRequest) {
 
     let moneyGain = 0
     if (passedStart) {
-      moneyGain = SALARY
+      moneyGain = calcSalary(me.children)
       // Check win IMMEDIATELY before landing effects
       if (me.children >= WIN_CHILDREN) {
         await updatePlayer(playerId, { position: newPosition, money: me.money + moneyGain })
-        await log(db, roomId, `${me.name} 擲出 ${die}，移動到 ${BOARD[newPosition].name}`)
-        await log(db, roomId, `${me.name} 過起點時有 ${me.children} 個孩子，獲勝！`)
+        await log(db, roomId, `🎲 ${me.name} 擲出 ${die} 點，前往 ${BOARD[newPosition].name}`)
+        await log(db, roomId, `${me.name} 帶著 ${me.children} 個孩子越過終點線，榮耀時刻到來！`)
         await db.from('game_state').update({
           phase: 'finished',
           phase_data: { winner_id: playerId },
           updated_at: new Date().toISOString(),
         }).eq('room_id', roomId)
         await db.from('rooms').update({ status: 'finished', winner_id: playerId }).eq('id', roomId)
-        await log(db, roomId, `🏆 ${me.name} 以 ${me.children} 個孩子獲勝！`)
+        await log(db, roomId, `🏆 ${me.name} 以 ${me.children} 個孩子笑傲群雄，勝出！`)
         return NextResponse.json({ ok: true })
       }
-      await log(db, roomId, `${me.name} 經過起點，領了 $${SALARY}`)
+      await log(db, roomId, `💵 ${me.name} 領薪日！過起點收入 $${moneyGain}（育有 ${me.children} 個孩子）`)
     }
 
     await updatePlayer(playerId, {
       position: newPosition,
       money: me.money + moneyGain,
     })
-    await log(db, roomId, `${me.name} 擲出 ${die}，移動到 ${BOARD[newPosition].name}`)
+    await log(db, roomId, `🎲 ${me.name} 擲出 ${die} 點，前往 ${BOARD[newPosition].name}`)
 
     const updatedMe = { ...me, position: newPosition, money: me.money + moneyGain }
     await landOnSquare(db, roomId, playerId, updatedMe, newPosition, players, state, die)
@@ -136,7 +134,7 @@ export async function POST(req: NextRequest) {
     await updatePlayer(playerId, { money: me.money - sq.price })
     const newProps = { ...state.properties, [me.position]: { owner_id: playerId, houses: 0 } }
     await db.from('game_state').update({ properties: newProps, updated_at: new Date().toISOString() }).eq('room_id', roomId)
-    await log(db, roomId, `${me.name} 購買了 ${sq.name}（$${sq.price}）`)
+    await log(db, roomId, `🏠 ${me.name} 出手購得 ${sq.name}，花費 $${sq.price}`)
     await updateState('end_turn', {})
     return NextResponse.json({ ok: true })
   }
@@ -156,7 +154,7 @@ export async function POST(req: NextRequest) {
     if (me.money < STEAL_COST) return NextResponse.json({ error: '錢不夠搶劫' }, { status: 400 })
 
     await updatePlayer(playerId, { money: me.money - STEAL_COST })
-    await log(db, roomId, `${me.name} 花了 $${STEAL_COST} 嘗試搶奪 ${victim.name} 的孩子！雙方擲骰決勝負！`)
+    await log(db, roomId, `⚔️ ${me.name} 砸下 $${STEAL_COST}，向 ${victim.name} 發動奪子行動！雙方擲骰決勝負！`)
     await updateState('steal_rolling', {
       thief_id: playerId,
       victim_id: victim.id,
@@ -184,7 +182,7 @@ export async function POST(req: NextRequest) {
     }
 
     const roll = rollDice()
-    await log(db, roomId, `${me.name} 搶奪擲骰：${roll}`)
+    await log(db, roomId, `${me.name} 奪子擲骰：${roll}`)
 
     const newPd: PhaseData = { ...pd }
     if (playerId === pd.thief_id) {
@@ -200,12 +198,12 @@ export async function POST(req: NextRequest) {
         if (victim.children > 0) {
           await updatePlayer(thief.id, { children: thief.children + 1 })
           await updatePlayer(victim.id, { children: Math.max(0, victim.children - 1) })
-          await log(db, roomId, `😈 ${thief.name}（${newPd.thief_roll}）勝過 ${victim.name}（${newPd.victim_roll}），搶走一個孩子！`)
+          await log(db, roomId, `😈 ${thief.name} 以 ${newPd.thief_roll} 勝 ${newPd.victim_roll}，搶走 ${victim.name} 一個孩子！`)
         } else {
-          await log(db, roomId, `${victim.name} 沒有孩子可以被搶...`)
+          await log(db, roomId, `${victim.name} 膝下無子，${thief.name} 撲了個空...`)
         }
       } else {
-        await log(db, roomId, `😅 ${thief.name}（${newPd.thief_roll}）未能勝過 ${victim.name}（${newPd.victim_roll}），搶奪失敗！`)
+        await log(db, roomId, `😮‍💨 ${thief.name} 擲出 ${newPd.thief_roll}，敗給 ${victim.name} 的 ${newPd.victim_roll}，奪子失敗！`)
       }
       await updateState('end_turn', {})
     } else {
@@ -224,13 +222,20 @@ export async function POST(req: NextRequest) {
     if (!partner) return NextResponse.json({ error: '找不到玩家' }, { status: 400 })
 
     await updatePlayer(playerId, { money: me.money - DATE_FEE })
-    await updatePlayer(partnerId, { money: partner.money - DATE_FEE })
-    await log(db, roomId, `${me.name} 邀請 ${partner.name} 約會！雙方各付 $${DATE_FEE}`)
+    await log(db, roomId, `💞 ${me.name} 邀請 ${partner.name} 共赴汽車旅館！發起者豪擲 $${DATE_FEE}`)
 
     await updateState('date_rolling', {
       initiator_id: playerId,
       partner_id: partnerId,
     })
+    return NextResponse.json({ ok: true })
+  }
+
+  if (action === 'skip_date') {
+    if (state.phase !== 'date_select') return NextResponse.json({ error: 'wrong phase' }, { status: 400 })
+    if (state.current_player_id !== playerId) return NextResponse.json({ error: '不是你的回合' }, { status: 400 })
+    await log(db, roomId, `${me.name} 婉拒了本次邀約，獨自離去`)
+    await updateState('end_turn', {})
     return NextResponse.json({ ok: true })
   }
 
@@ -242,7 +247,7 @@ export async function POST(req: NextRequest) {
     }
 
     const myTotal = rollDice()
-    await log(db, roomId, `${me.name} 約會擲骰：${myTotal}`)
+    await log(db, roomId, `${me.name} 約會擲骰出擊：${myTotal}`)
 
     const newPd: PhaseData = { ...pd }
     if (playerId === pd.initiator_id) {
@@ -267,13 +272,50 @@ export async function POST(req: NextRequest) {
         if (initiator.next_date_double) {
           await updatePlayer(initiator.id, { next_date_double: false })
         }
-        await log(db, roomId, `💕 ${result.message} — ${winner.name} 得到 ${result.childrenGained} 個孩子！`)
+        await log(db, roomId, `💕 ${result.message} ${winner.name} 喜獲 ${result.childrenGained} 個孩子！`)
       } else {
         await log(db, roomId, result.message)
       }
       await updateState('end_turn', {})
     } else {
       await updateState('date_rolling', newPd)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  if (action === 'party_roll') {
+    if (state.phase !== 'party_rolling') return NextResponse.json({ error: 'wrong phase' }, { status: 400 })
+    const pd = state.phase_data
+    const partyRolls: Record<string, number> = { ...(pd.party_rolls ?? {}) }
+    if (partyRolls[playerId] !== undefined) {
+      return NextResponse.json({ error: '你已經擲過骰了' }, { status: 400 })
+    }
+
+    const roll = rollDice()
+    partyRolls[playerId] = roll
+    await log(db, roomId, `🎲 ${me.name} 派對擲骰：${roll}`)
+
+    const activePlayers = players.filter(p => !p.is_bankrupt)
+    const allRolled = activePlayers.every(p => partyRolls[p.id] !== undefined)
+
+    if (allRolled) {
+      const maxRoll = Math.max(...Object.values(partyRolls))
+      const winners = activePlayers.filter(p => partyRolls[p.id] === maxRoll)
+      for (const winner of winners) {
+        await db.from('players').update({ children: winner.children + 1 }).eq('id', winner.id)
+      }
+      const winnerNames = winners.map(p => p.name).join('、')
+      await log(db, roomId, `🏆 派對結束！${winnerNames} 以 ${maxRoll} 點奪冠，各得 1 個孩子！`)
+      await db.from('game_state').update({
+        phase: 'end_turn',
+        phase_data: {},
+        updated_at: new Date().toISOString(),
+      }).eq('room_id', roomId)
+    } else {
+      await db.from('game_state').update({
+        phase_data: { ...pd, party_rolls: partyRolls },
+        updated_at: new Date().toISOString(),
+      }).eq('room_id', roomId)
     }
     return NextResponse.json({ ok: true })
   }
@@ -331,26 +373,30 @@ async function landOnSquare(
       await updateState('end_turn', {})
       break
 
-    case 'tax':
-      await updatePlayer(playerId, { money: player.money - TAX_AMOUNT })
-      await log(db, roomId, `${player.name} 消費 $${TAX_AMOUNT}`)
-      await updateState('end_turn', {})
+    case 'party': {
+      const partyFee = Math.floor(player.money * 0.5)
+      await updatePlayer(playerId, { money: player.money - partyFee })
+      await log(db, roomId, `🎉 ${player.name} 舉辦多人派對，豪擲 $${partyFee}！所有玩家請擲骰，點數最高者得孩子！`)
+      await updateState('party_rolling', { host_id: playerId, party_rolls: {} })
       break
+    }
 
-    case 'work':
-      await updatePlayer(playerId, { money: player.money + WORK_BONUS })
-      await log(db, roomId, `${player.name} 工作賺了 $${WORK_BONUS}`)
+    case 'work': {
+      const workIncome = calcWorkBonus(player.children)
+      await updatePlayer(playerId, { money: player.money + workIncome })
+      await log(db, roomId, `💼 ${player.name} 努力工作，收入 $${workIncome}（育有 ${player.children} 個孩子）`)
       await updateState('end_turn', {})
       break
+    }
 
     case 'hospital': {
       if (player.children === 0) {
-        await log(db, roomId, `${player.name} 健康檢查免費（沒有孩子）`)
+        await log(db, roomId, `${player.name} 健檢通過，膝下無子，免費輕鬆過關`)
         await updateState('end_turn', {})
       } else {
         const fee = player.children * HOSPITAL_PER_CHILD
         await updatePlayer(playerId, { money: player.money - fee })
-        await log(db, roomId, `${player.name} 在醫院繳了 $${fee} 健檢費（${player.children} 個孩子）`)
+        await log(db, roomId, `🏥 ${player.name} 帶 ${player.children} 個孩子健檢，合計花費 $${fee}`)
         await updateState('end_turn', {})
       }
       break
@@ -361,14 +407,14 @@ async function landOnSquare(
       if (!prop) {
         await updateState('buy_property', { landed_square: squareId, dice: die })
       } else if (prop.owner_id === playerId) {
-        await log(db, roomId, `${player.name} 落在自己的 ${sq.name}`)
+        await log(db, roomId, `${player.name} 踏上自家地盤 ${sq.name}，安心！`)
         await updateState('end_turn', {})
       } else {
         const rent = calcRent(squareId, state.properties)
         const owner = players.find(p => p.id === prop.owner_id)
         await updatePlayer(playerId, { money: player.money - rent })
         if (owner) await db.from('players').update({ money: owner.money + rent }).eq('id', owner.id)
-        await log(db, roomId, `${player.name} 落在 ${owner?.name} 的 ${sq.name}，付租金 $${rent}`)
+        await log(db, roomId, `${player.name} 踏入 ${owner?.name} 的地盤 ${sq.name}，繳租 $${rent}`)
 
         if (owner && owner.children > 0 && player.money - rent >= STEAL_COST) {
           await updateState('steal_option', {
@@ -387,7 +433,7 @@ async function landOnSquare(
     case 'date': {
       const others = players.filter(p => p.id !== playerId && !p.is_bankrupt)
       if (others.length === 0) {
-        await log(db, roomId, `${player.name} 在汽車旅館，但沒有其他玩家`)
+        await log(db, roomId, `${player.name} 到了汽車旅館，卻發現無人可約，遺憾離去`)
         await updateState('end_turn', {})
       } else {
         await updateState('date_select', { initiator_id: playerId, dice: die })
@@ -397,9 +443,11 @@ async function landOnSquare(
 
     case 'chance': {
       const card = randomCard(CHANCE_CARDS)
-      await log(db, roomId, `${player.name} 抽到機會卡：${card.text}`)
+      await log(db, roomId, `📦 ${player.name} 抽到機會：${card.text}`)
       const result = applyCardEffect(card.effect, player, players, state)
-      await updatePlayer(playerId, result.playerUpdates)
+      if (Object.keys(result.playerUpdates).length > 0) {
+        await updatePlayer(playerId, result.playerUpdates)
+      }
       for (const upd of result.otherUpdates ?? []) {
         const fields: Partial<Player> = {}
         if (upd.money !== undefined) fields.money = upd.money
@@ -428,9 +476,11 @@ async function landOnSquare(
 
     case 'fate': {
       const card = randomCard(FATE_CARDS)
-      await log(db, roomId, `${player.name} 抽到命運卡：${card.text}`)
+      await log(db, roomId, `🎴 ${player.name} 抽到命運：${card.text}`)
       const result = applyCardEffect(card.effect, player, players, state)
-      await updatePlayer(playerId, result.playerUpdates)
+      if (Object.keys(result.playerUpdates).length > 0) {
+        await updatePlayer(playerId, result.playerUpdates)
+      }
       for (const upd of result.otherUpdates ?? []) {
         const fields: Partial<Player> = {}
         if (upd.money !== undefined) fields.money = upd.money
