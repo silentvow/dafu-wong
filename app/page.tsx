@@ -55,7 +55,7 @@ export default function Home() {
           <div className="grid grid-cols-1 gap-1.5">
             <div className="flex items-start gap-2">
               <span className="text-base leading-none mt-0.5">💕</span>
-              <span className="text-gray-600">落到<b>約會廣場</b>→ 選人配對，擲骰高者得孩子</span>
+              <span className="text-gray-600">落到<b>汽車旅館</b>→ 選人配對，擲骰高者得孩子</span>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-base leading-none mt-0.5">😈</span>
@@ -63,7 +63,7 @@ export default function Home() {
             </div>
             <div className="flex items-start gap-2">
               <span className="text-base leading-none mt-0.5">🏆</span>
-              <span className="text-gray-600"><b>先達到 5 個孩子</b>的玩家獲勝！（4–8 人）</span>
+              <span className="text-gray-600"><b>先達到 5 個孩子</b>的玩家獲勝！（2–8 人）</span>
             </div>
           </div>
         </div>

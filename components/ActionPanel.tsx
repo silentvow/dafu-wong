@@ -226,7 +226,7 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
         <p className="font-bold text-center mb-1">😈 搶奪孩子？</p>
         <p className="text-gray-500 text-sm text-center mb-3">
           {owner.name} 有 {owner.children} 個孩子。<br />
-          花費 ${STEAL_COST.toLocaleString()} 嘗試搶走一個（對方可贖回 ${RANSOM_COST.toLocaleString()}）
+          花費 ${STEAL_COST.toLocaleString()} 嘗試搶走一個（對方有 {RANSOM_SECONDS} 秒可贖回 ${RANSOM_COST.toLocaleString()}）
         </p>
         <div className="flex gap-2">
           {btn('😈 搶奪！', 'attempt_steal', undefined, 'flex-1 bg-red-500 hover:bg-red-600')}
