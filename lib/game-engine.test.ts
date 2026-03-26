@@ -24,7 +24,7 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
 
 describe('calcRent', () => {
   const singleOwned: Record<string, PropertyState> = {
-    1: { owner_id: 'p1', houses: 0 }, // 便利商店 (brown), rent: [90, 270]
+    1: { owner_id: 'p1', houses: 0 }, // 便利商店 (brown), rent: [120, 300]
   }
   const bothBrownOwned: Record<string, PropertyState> = {
     1: { owner_id: 'p1', houses: 0 },
@@ -32,11 +32,11 @@ describe('calcRent', () => {
   }
 
   it('returns base rent when owner does not own full color group', () => {
-    expect(calcRent(1, singleOwned)).toBe(90)
+    expect(calcRent(1, singleOwned)).toBe(120)
   })
 
   it('returns doubled rent when owner holds full color group', () => {
-    expect(calcRent(1, bothBrownOwned)).toBe(270)
+    expect(calcRent(1, bothBrownOwned)).toBe(300)
   })
 
   it('returns 0 for unowned property', () => {
