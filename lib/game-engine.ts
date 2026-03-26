@@ -4,7 +4,7 @@ import {
 import {
   BOARD, COLOR_GROUPS, TOTAL_SQUARES, WIN_CHILDREN,
   SALARY, TAX_AMOUNT, HOSPITAL_PER_CHILD,
-  DATE_FEE, STEAL_COST, RANSOM_COST, RANSOM_SECONDS,
+  DATE_FEE, STEAL_COST,
   CHANCE_CARDS, FATE_CARDS, GameCard,
 } from './board-config'
 
@@ -363,11 +363,3 @@ export function resolveDateRoll(
   }
 }
 
-/** Build ransom deadline timestamp */
-export function makeRansomDeadline(): string {
-  return new Date(Date.now() + RANSOM_SECONDS * 1000).toISOString()
-}
-
-export function isRansomExpired(deadline: string): boolean {
-  return new Date() > new Date(deadline)
-}

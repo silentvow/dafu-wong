@@ -36,7 +36,7 @@ export type GamePhase =
   | 'rolling'
   | 'buy_property'
   | 'steal_option'
-  | 'steal_waiting'
+  | 'steal_rolling'
   | 'date_select'
   | 'date_rolling'
   | 'end_turn'
@@ -53,8 +53,8 @@ export interface PhaseData {
   // steal
   thief_id?: string
   victim_id?: string
-  ransom_cost?: number
-  ransom_deadline?: string
+  thief_roll?: number
+  victim_roll?: number
 
   // date
   initiator_id?: string

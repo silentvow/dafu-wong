@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import {
   rollDice, movePlayer, calcRent, applyCardEffect,
-  nextPlayerIndex, checkWin, resolveDateRoll,
-  makeRansomDeadline, isRansomExpired, randomCard,
+  nextPlayerIndex, checkWin, resolveDateRoll, randomCard,
 } from '@/lib/game-engine'
 import {
   BOARD, SALARY, TAX_AMOUNT, HOSPITAL_PER_CHILD, WORK_BONUS,
-  DATE_FEE, STEAL_COST, RANSOM_COST, WIN_CHILDREN,
+  DATE_FEE, STEAL_COST, WIN_CHILDREN,
   CHANCE_CARDS, FATE_CARDS,
 } from '@/lib/board-config'
 import { Player, GameState, PhaseData, PropertyState } from '@/lib/types'
@@ -18,8 +17,7 @@ type ActionType =
   | 'skip_buy'
   | 'attempt_steal'
   | 'skip_steal'
-  | 'pay_ransom'
-  | 'resolve_steal'
+  | 'steal_roll'
   | 'pick_date_partner'
   | 'date_roll'
   | 'end_turn'
@@ -158,12 +156,10 @@ export async function POST(req: NextRequest) {
     if (me.money < STEAL_COST) return NextResponse.json({ error: '錢不夠搶劫' }, { status: 400 })
 
     await updatePlayer(playerId, { money: me.money - STEAL_COST })
-    await log(db, roomId, `${me.name} 花了 $${STEAL_COST} 嘗試搶奪 ${victim.name} 的孩子！`)
-    await updateState('steal_waiting', {
+    await log(db, roomId, `${me.name} 花了 $${STEAL_COST} 嘗試搶奪 ${victim.name} 的孩子！雙方擲骰決勝負！`)
+    await updateState('steal_rolling', {
       thief_id: playerId,
       victim_id: victim.id,
-      ransom_cost: RANSOM_COST,
-      ransom_deadline: makeRansomDeadline(),
     })
     return NextResponse.json({ ok: true })
   }
@@ -174,35 +170,47 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  if (action === 'pay_ransom') {
-    if (state.phase !== 'steal_waiting') return NextResponse.json({ error: 'wrong phase' }, { status: 400 })
+  if (action === 'steal_roll') {
+    if (state.phase !== 'steal_rolling') return NextResponse.json({ error: 'wrong phase' }, { status: 400 })
     const pd = state.phase_data
-    if (playerId !== pd.victim_id) return NextResponse.json({ error: '你不是受害者' }, { status: 400 })
-    const ransom = pd.ransom_cost ?? RANSOM_COST
-
-    // Allow negative money — ransom just disappears (no one receives it)
-    await updatePlayer(playerId, { money: me.money - ransom })
-    await log(db, roomId, `${me.name} 付了 $${ransom} 贖回孩子！搶奪失敗`)
-    await updateState('end_turn', {})
-    return NextResponse.json({ ok: true })
-  }
-
-  if (action === 'resolve_steal') {
-    if (state.phase !== 'steal_waiting') return NextResponse.json({ error: 'wrong phase' }, { status: 400 })
-    const pd = state.phase_data
-    if (!isRansomExpired(pd.ransom_deadline!)) {
-      return NextResponse.json({ error: '贖金時限未到' }, { status: 400 })
+    if (playerId !== pd.thief_id && playerId !== pd.victim_id) {
+      return NextResponse.json({ error: '你不在這次搶奪中' }, { status: 400 })
     }
-    const thief = players.find(p => p.id === pd.thief_id)!
-    const victim = players.find(p => p.id === pd.victim_id)!
-    if (victim.children > 0) {
-      await updatePlayer(thief.id, { children: thief.children + 1 })
-      await updatePlayer(victim.id, { children: Math.max(0, victim.children - 1) })
-      await log(db, roomId, `${thief.name} 成功搶走了 ${victim.name} 的孩子！`)
+    if (playerId === pd.thief_id && pd.thief_roll !== undefined) {
+      return NextResponse.json({ error: '你已經擲過骰了' }, { status: 400 })
+    }
+    if (playerId === pd.victim_id && pd.victim_roll !== undefined) {
+      return NextResponse.json({ error: '你已經擲過骰了' }, { status: 400 })
+    }
+
+    const roll = rollDice()
+    await log(db, roomId, `${me.name} 搶奪擲骰：${roll}`)
+
+    const newPd: PhaseData = { ...pd }
+    if (playerId === pd.thief_id) {
+      newPd.thief_roll = roll
     } else {
-      await log(db, roomId, `${victim.name} 沒有孩子可以被搶...`)
+      newPd.victim_roll = roll
     }
-    await updateState('end_turn', {})
+
+    if (newPd.thief_roll !== undefined && newPd.victim_roll !== undefined) {
+      const thief = players.find(p => p.id === pd.thief_id)!
+      const victim = players.find(p => p.id === pd.victim_id)!
+      if (newPd.thief_roll > newPd.victim_roll) {
+        if (victim.children > 0) {
+          await updatePlayer(thief.id, { children: thief.children + 1 })
+          await updatePlayer(victim.id, { children: Math.max(0, victim.children - 1) })
+          await log(db, roomId, `😈 ${thief.name}（${newPd.thief_roll}）勝過 ${victim.name}（${newPd.victim_roll}），搶走一個孩子！`)
+        } else {
+          await log(db, roomId, `${victim.name} 沒有孩子可以被搶...`)
+        }
+      } else {
+        await log(db, roomId, `😅 ${thief.name}（${newPd.thief_roll}）未能勝過 ${victim.name}（${newPd.victim_roll}），搶奪失敗！`)
+      }
+      await updateState('end_turn', {})
+    } else {
+      await updateState('steal_rolling', newPd)
+    }
     return NextResponse.json({ ok: true })
   }
 

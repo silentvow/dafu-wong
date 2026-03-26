@@ -59,7 +59,7 @@ export default function Home() {
             </div>
             <div className="flex items-start gap-2">
               <span className="text-base leading-none mt-0.5">😈</span>
-              <span className="text-gray-600">落到<b>對手地產</b>→ 花費可搶奪孩子（對方可贖回）</span>
+              <span className="text-gray-600">落到<b>對手地產</b>→ 花費 $1,500 搶奪，雙方擲骰比大小，搶奪方點數大才成功</span>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-base leading-none mt-0.5">🏆</span>

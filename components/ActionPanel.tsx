@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { Player, GameState, GameLog } from '@/lib/types'
-import { BOARD, WIN_CHILDREN, RANSOM_SECONDS, STEAL_COST, RANSOM_COST } from '@/lib/board-config'
+import { BOARD, WIN_CHILDREN, STEAL_COST } from '@/lib/board-config'
 
 const KEY_MOMENT_KEYWORDS = ['搶走', '瘟疫', '天降地契', '人口販運', '獲勝']
 
@@ -65,7 +65,6 @@ interface Props {
 
 export default function ActionPanel({ state, players, myId, logs, onAction }: Props) {
   const [loading, setLoading] = useState(false)
-  const [countdown, setCountdown] = useState(0)
   const [diceRolling, setDiceRolling] = useState(false)
   const skipRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -85,22 +84,6 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
     }
   }, [state.updated_at, isMyTurn, state.phase])
 
-  // Ransom countdown
-  useEffect(() => {
-    if (state.phase !== 'steal_waiting' || !pd.ransom_deadline) return
-    const update = () => {
-      const secs = Math.max(0, Math.ceil((new Date(pd.ransom_deadline!).getTime() - Date.now()) / 1000))
-      setCountdown(secs)
-      if (secs === 0) {
-        if (pd.thief_id === myId) {
-          act('resolve_steal')
-        }
-      }
-    }
-    update()
-    const t = setInterval(update, 500)
-    return () => clearInterval(t)
-  }, [state.phase, pd.ransom_deadline])
 
   async function act(action: string, data?: Record<string, unknown>) {
     if (action === 'roll') {
@@ -226,7 +209,7 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
         <p className="font-bold text-center mb-1">😈 搶奪孩子？</p>
         <p className="text-gray-500 text-sm text-center mb-3">
           {owner.name} 有 {owner.children} 個孩子。<br />
-          花費 ${STEAL_COST.toLocaleString()} 嘗試搶走一個（對方有 {RANSOM_SECONDS} 秒可贖回 ${RANSOM_COST.toLocaleString()}）
+          花費 ${STEAL_COST.toLocaleString()} 嘗試搶走一個，雙方擲骰比大小，搶奪方點數較大才成功
         </p>
         <div className="flex gap-2">
           {btn('😈 搶奪！', 'attempt_steal', undefined, 'flex-1 bg-red-500 hover:bg-red-600')}
@@ -236,23 +219,30 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
     )
   }
 
-  // ── STEAL WAITING ──
-  if (state.phase === 'steal_waiting') {
+  // ── STEAL ROLLING ──
+  if (state.phase === 'steal_rolling') {
     const thief = players.find(p => p.id === pd.thief_id)
+    const victim = players.find(p => p.id === pd.victim_id)
+    const isThief = pd.thief_id === myId
     const isVictim = pd.victim_id === myId
+    const inSteal = isThief || isVictim
+    const myRollDone = (isThief && pd.thief_roll !== undefined) || (isVictim && pd.victim_roll !== undefined)
     return (
       <div className="bg-white rounded-2xl p-4 shadow text-center">
-        <p className="font-bold text-red-600 mb-1">🚨 孩子被搶！</p>
-        <p className="text-gray-500 text-sm mb-2">{thief?.name} 正在搶奪孩子！</p>
-        <div className="text-2xl font-bold text-red-500 mb-3">{countdown}s</div>
-        {isVictim ? (
-          <>
-            <p className="text-sm mb-3">支付 <span className="font-bold">${pd.ransom_cost}</span> 贖回孩子！</p>
-            {btn(`💰 支付贖金 $${pd.ransom_cost}`, 'pay_ransom', undefined, 'w-full bg-blue-500 hover:bg-blue-600')}
-          </>
-        ) : (
-          <p className="text-gray-400 text-sm">等待受害者回應...</p>
-        )}
+        <p className="font-bold text-red-600 mb-2">😈 搶奪擲骰！</p>
+        <div className="flex justify-around mb-3">
+          <div>
+            <div className="font-medium text-sm" style={{ color: thief?.color }}>{thief?.name}（搶）</div>
+            <div className="text-xl">{pd.thief_roll ?? '🎲'}</div>
+          </div>
+          <div className="text-xl self-center">VS</div>
+          <div>
+            <div className="font-medium text-sm" style={{ color: victim?.color }}>{victim?.name}（守）</div>
+            <div className="text-xl">{pd.victim_roll ?? '🎲'}</div>
+          </div>
+        </div>
+        {inSteal && !myRollDone && btn('🎲 擲骰！', 'steal_roll', undefined, 'w-full bg-red-500 hover:bg-red-600')}
+        {(!inSteal || myRollDone) && <p className="text-gray-400 text-sm">等待對方擲骰...</p>}
       </div>
     )
   }

@@ -56,8 +56,6 @@ export const TAX_AMOUNT      = 500
 export const HOSPITAL_PER_CHILD = 200
 export const DATE_FEE        = 500
 export const STEAL_COST      = 1500
-export const RANSOM_COST     = 3000
-export const RANSOM_SECONDS  = 30
 
 // ── Card decks ──
 export interface GameCard {
