@@ -6,7 +6,7 @@ import {
 } from '@/lib/game-engine'
 import {
   BOARD, SALARY, HOSPITAL_PER_CHILD,
-  DATE_FEE, STEAL_COST, WIN_CHILDREN,
+  DATE_FEE, PATERNITY_COST, WIN_CHILDREN,
   CHANCE_CARDS, FATE_CARDS,
   calcSalary, calcWorkBonus,
 } from '@/lib/board-config'
@@ -16,9 +16,9 @@ type ActionType =
   | 'roll'
   | 'buy_property'
   | 'skip_buy'
-  | 'attempt_steal'
-  | 'skip_steal'
-  | 'steal_roll'
+  | 'pick_paternity_target'
+  | 'skip_paternity'
+  | 'paternity_roll'
   | 'pick_date_partner'
   | 'skip_date'
   | 'date_roll'
@@ -145,69 +145,78 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  if (action === 'attempt_steal') {
-    if (state.phase !== 'steal_option') return NextResponse.json({ error: 'wrong phase' }, { status: 400 })
+  if (action === 'pick_paternity_target') {
+    if (state.phase !== 'paternity_select') return NextResponse.json({ error: 'wrong phase' }, { status: 400 })
     if (state.current_player_id !== playerId) return NextResponse.json({ error: '不是你的回合' }, { status: 400 })
-    const pd = state.phase_data
-    const victim = players.find(p => p.id === pd.property_owner)
-    if (!victim) return NextResponse.json({ error: '找不到受害者' }, { status: 400 })
-    if (me.money < STEAL_COST) return NextResponse.json({ error: '錢不夠搶劫' }, { status: 400 })
+    const targetId = data?.targetId
+    if (typeof targetId !== 'string' || !targetId || targetId === playerId) return NextResponse.json({ error: '請選擇其他玩家' }, { status: 400 })
+    const target = players.find(p => p.id === targetId && !p.is_bankrupt)
+    if (!target) return NextResponse.json({ error: '找不到目標玩家' }, { status: 400 })
+    if (target.children === 0) return NextResponse.json({ error: '對方沒有孩子' }, { status: 400 })
+    // Re-read money immediately before deducting to narrow the double-spend window
+    const { data: freshMeRow } = await db.from('players').select('money').eq('id', playerId).single()
+    const currentMoney = (freshMeRow as { money: number } | null)?.money ?? me.money
+    if (currentMoney < PATERNITY_COST) return NextResponse.json({ error: '金錢不足' }, { status: 400 })
 
-    await updatePlayer(playerId, { money: me.money - STEAL_COST })
-    await log(db, roomId, `⚔️ ${me.name} 砸下 $${STEAL_COST}，向 ${victim.name} 發動奪子行動！雙方擲骰決勝負！`)
-    await updateState('steal_rolling', {
-      thief_id: playerId,
-      victim_id: victim.id,
-    })
+    await updatePlayer(playerId, { money: currentMoney - PATERNITY_COST })
+    await log(db, roomId, `🧬 ${me.name} 砸下 $${PATERNITY_COST} 申請親子鑑定，目標：${target.name}！雙方擲骰決勝負！`)
+    await updateState('paternity_rolling', { attacker_id: playerId, target_id: targetId })
     return NextResponse.json({ ok: true })
   }
 
-  if (action === 'skip_steal') {
+  if (action === 'skip_paternity') {
+    if (state.phase !== 'paternity_select') return NextResponse.json({ error: 'wrong phase' }, { status: 400 })
     if (state.current_player_id !== playerId) return NextResponse.json({ error: '不是你的回合' }, { status: 400 })
+    await log(db, roomId, `${me.name} 放棄了親子鑑定`)
     await updateState('end_turn', {})
     return NextResponse.json({ ok: true })
   }
 
-  if (action === 'steal_roll') {
-    if (state.phase !== 'steal_rolling') return NextResponse.json({ error: 'wrong phase' }, { status: 400 })
+  if (action === 'paternity_roll') {
+    if (state.phase !== 'paternity_rolling') return NextResponse.json({ error: 'wrong phase' }, { status: 400 })
     const pd = state.phase_data
-    if (playerId !== pd.thief_id && playerId !== pd.victim_id) {
-      return NextResponse.json({ error: '你不在這次搶奪中' }, { status: 400 })
+    if (!pd?.attacker_id || !pd?.target_id) return NextResponse.json({ error: 'invalid phase data' }, { status: 500 })
+    if (playerId !== pd.attacker_id && playerId !== pd.target_id) {
+      return NextResponse.json({ error: '你不在這次親子鑑定中' }, { status: 400 })
     }
-    if (playerId === pd.thief_id && pd.thief_roll !== undefined) {
+    if (playerId === pd.attacker_id && pd.attacker_roll !== undefined) {
       return NextResponse.json({ error: '你已經擲過骰了' }, { status: 400 })
     }
-    if (playerId === pd.victim_id && pd.victim_roll !== undefined) {
+    if (playerId === pd.target_id && pd.target_roll !== undefined) {
       return NextResponse.json({ error: '你已經擲過骰了' }, { status: 400 })
     }
 
     const roll = rollDice()
-    await log(db, roomId, `${me.name} 奪子擲骰：${roll}`)
+    await log(db, roomId, `${me.name} 親子鑑定擲骰：${roll}`)
 
-    const newPd: PhaseData = { ...pd }
-    if (playerId === pd.thief_id) {
-      newPd.thief_roll = roll
+    // Re-read phase_data before writing to avoid overwriting a concurrent roll
+    const { data: freshGs } = await db.from('game_state').select('phase_data').eq('room_id', roomId).single()
+    const livePd: PhaseData = ((freshGs?.phase_data as PhaseData) ?? pd)
+    const newPd: PhaseData = { ...livePd }
+    if (playerId === pd.attacker_id) {
+      newPd.attacker_roll = roll
     } else {
-      newPd.victim_roll = roll
+      newPd.target_roll = roll
     }
 
-    if (newPd.thief_roll !== undefined && newPd.victim_roll !== undefined) {
-      const thief = players.find(p => p.id === pd.thief_id)!
-      const victim = players.find(p => p.id === pd.victim_id)!
-      if (newPd.thief_roll > newPd.victim_roll) {
-        if (victim.children > 0) {
-          await updatePlayer(thief.id, { children: thief.children + 1 })
-          await updatePlayer(victim.id, { children: Math.max(0, victim.children - 1) })
-          await log(db, roomId, `😈 ${thief.name} 以 ${newPd.thief_roll} 勝 ${newPd.victim_roll}，搶走 ${victim.name} 一個孩子！`)
+    if (newPd.attacker_roll !== undefined && newPd.target_roll !== undefined) {
+      const attacker = players.find(p => p.id === pd.attacker_id)!
+      const target = players.find(p => p.id === pd.target_id)!
+      if (newPd.attacker_roll > newPd.target_roll) {
+        if (target.children > 0) {
+          await updatePlayer(attacker.id, { children: attacker.children + 1 })
+          await updatePlayer(target.id, { children: Math.max(0, target.children - 1) })
+          await log(db, roomId, `🧬 ${attacker.name} 以 ${newPd.attacker_roll} 勝 ${newPd.target_roll}，親子鑑定成功！搶走 ${target.name} 一個孩子！`)
         } else {
-          await log(db, roomId, `${victim.name} 膝下無子，${thief.name} 撲了個空...`)
+          await updatePlayer(attacker.id, { money: attacker.money + PATERNITY_COST })
+          await log(db, roomId, `${target.name} 膝下空空，${attacker.name} 撲了個空...退款 $${PATERNITY_COST}`)
         }
       } else {
-        await log(db, roomId, `😮‍💨 ${thief.name} 擲出 ${newPd.thief_roll}，敗給 ${victim.name} 的 ${newPd.victim_roll}，奪子失敗！`)
+        await log(db, roomId, `😮‍💨 ${attacker.name} 擲出 ${newPd.attacker_roll}，未能勝過 ${target.name} 的 ${newPd.target_roll}，親子鑑定失敗！`)
       }
       await updateState('end_turn', {})
     } else {
-      await updateState('steal_rolling', newPd)
+      await updateState('paternity_rolling', newPd)
     }
     return NextResponse.json({ ok: true })
   }
@@ -299,13 +308,16 @@ export async function POST(req: NextRequest) {
     const allRolled = activePlayers.every(p => partyRolls[p.id] !== undefined)
 
     if (allRolled) {
-      const maxRoll = Math.max(...Object.values(partyRolls))
-      const winners = activePlayers.filter(p => partyRolls[p.id] === maxRoll)
+      const winners = activePlayers.filter(p => partyRolls[p.id] % 2 === 0)
       for (const winner of winners) {
         await db.from('players').update({ children: winner.children + 1 }).eq('id', winner.id)
       }
-      const winnerNames = winners.map(p => p.name).join('、')
-      await log(db, roomId, `🏆 派對結束！${winnerNames} 以 ${maxRoll} 點奪冠，各得 1 個孩子！`)
+      if (winners.length > 0) {
+        const winnerNames = winners.map(p => `${p.name}(${partyRolls[p.id]})`).join('、')
+        await log(db, roomId, `🍼 派對結束！${winnerNames} 擲出偶數，各得 1 個孩子！`)
+      } else {
+        await log(db, roomId, `😅 派對結束！沒有人擲出偶數，無人得子！`)
+      }
       await db.from('game_state').update({
         phase: 'end_turn',
         phase_data: {},
@@ -376,7 +388,7 @@ async function landOnSquare(
     case 'party': {
       const partyFee = Math.floor(player.money * 0.5)
       await updatePlayer(playerId, { money: player.money - partyFee })
-      await log(db, roomId, `🎉 ${player.name} 舉辦多人派對，豪擲 $${partyFee}！所有玩家請擲骰，點數最高者得孩子！`)
+      await log(db, roomId, `🎉 ${player.name} 舉辦多人派對，豪擲 $${partyFee}！所有玩家請擲骰，偶數者得孩子！`)
       await updateState('party_rolling', { host_id: playerId, party_rolls: {} })
       break
     }
@@ -386,6 +398,20 @@ async function landOnSquare(
       await updatePlayer(playerId, { money: player.money + workIncome })
       await log(db, roomId, `💼 ${player.name} 努力工作，收入 $${workIncome}（育有 ${player.children} 個孩子）`)
       await updateState('end_turn', {})
+      break
+    }
+
+    case 'paternity': {
+      const targets = players.filter(p => p.id !== playerId && !p.is_bankrupt && p.children > 0)
+      if (player.money < PATERNITY_COST) {
+        await log(db, roomId, `🧬 ${player.name} 踏上親子鑑定格，但荷包不足 $${PATERNITY_COST}，無奈離去`)
+        await updateState('end_turn', {})
+      } else if (targets.length === 0) {
+        await log(db, roomId, `🧬 ${player.name} 踏上親子鑑定格，但其他玩家膝下無子，無從下手`)
+        await updateState('end_turn', {})
+      } else {
+        await updateState('paternity_select', { attacker_id: playerId })
+      }
       break
     }
 
@@ -415,17 +441,7 @@ async function landOnSquare(
         await updatePlayer(playerId, { money: player.money - rent })
         if (owner) await db.from('players').update({ money: owner.money + rent }).eq('id', owner.id)
         await log(db, roomId, `${player.name} 踏入 ${owner?.name} 的地盤 ${sq.name}，繳租 $${rent}`)
-
-        if (owner && owner.children > 0 && player.money - rent >= STEAL_COST) {
-          await updateState('steal_option', {
-            landed_square: squareId,
-            property_owner: prop.owner_id,
-            rent_amount: rent,
-            dice: die,
-          })
-        } else {
-          await updateState('end_turn', {})
-        }
+        await updateState('end_turn', {})
       }
       break
     }
