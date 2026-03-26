@@ -18,6 +18,7 @@ const SQUARE_BG: Record<string, string> = {
   date: "bg-pink-100",
   chance: "bg-orange-100",
   fate: "bg-indigo-100",
+  paternity: "bg-teal-100",
   property: "bg-white",
 };
 

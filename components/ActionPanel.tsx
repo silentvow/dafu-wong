@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Player, GameState, GameLog } from '@/lib/types'
-import { BOARD, WIN_CHILDREN, STEAL_COST, DATE_FEE } from '@/lib/board-config'
+import { BOARD, WIN_CHILDREN, PATERNITY_COST, DATE_FEE } from '@/lib/board-config'
 
 const KEY_MOMENT_KEYWORDS = ['搶走', '瘟疫', '天降地契', '人口販運', '獲勝']
 const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
@@ -189,7 +189,7 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
   }, [state.updated_at, isMyTurn, state.phase])
 
   async function act(action: string, data?: Record<string, unknown>) {
-    if (action === 'roll' || action === 'party_roll') {
+    if (action === 'roll' || action === 'party_roll' || action === 'paternity_roll') {
       setDiceRolling(true)
       await new Promise(r => setTimeout(r, 900))
     }
@@ -322,77 +322,81 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
     )
   }
 
-  // ── STEAL OPTION ──
-  if (state.phase === 'steal_option') {
-    const owner = players.find(p => p.id === pd.property_owner)
-    const diceResult = pd.dice as number | undefined
-    const squareName = BOARD[currentPlayer?.position ?? me?.position ?? 0]?.name ?? ''
-    const rentAmount = pd.rent_amount as number | undefined
+  // ── PATERNITY SELECT ──
+  if (state.phase === 'paternity_select') {
+    const targets = players.filter(p => p.id !== state.current_player_id && !p.is_bankrupt && p.children > 0)
 
     if (!isMyTurn) {
       return (
         <div className="bg-white rounded-2xl p-4 shadow">
-          {diceResult && <DiceBanner dice={diceResult} squareName={squareName} />}
-          {rentAmount !== undefined && (
-            <p className="text-xs text-center text-gray-500 mb-2">已付租金 ${rentAmount}</p>
-          )}
-          <div className="text-center text-gray-400 text-sm">{currentPlayer?.name} 考慮是否搶奪...</div>
+          <div className="text-center text-gray-400 text-sm">{currentPlayer?.name} 正在選擇親子鑑定目標...</div>
         </div>
       )
     }
-    if (!owner || owner.children === 0) return <div className="bg-white rounded-2xl p-4 text-center text-gray-400 shadow">等待...</div>
+    const canAfford = (me?.money ?? 0) >= PATERNITY_COST
     return (
       <div className="bg-white rounded-2xl p-4 shadow">
-        {diceResult && <DiceBanner dice={diceResult} squareName={squareName} />}
-        {rentAmount !== undefined && (
-          <p className="text-xs text-center text-red-500 mb-2">已付租金 ${rentAmount} 給 {owner.name}</p>
-        )}
-        <p className="font-bold text-center mb-1">😈 搶奪孩子？</p>
-        <p className="text-gray-500 text-sm text-center mb-3">
-          {owner.name} 有 {owner.children} 個孩子。<br />
-          花費 ${STEAL_COST.toLocaleString()} 嘗試搶走一個，雙方擲骰比大小，搶奪方點數較大才成功
+        <p className="font-bold text-center text-teal-700 mb-1">🧬 親子鑑定</p>
+        <p className="text-xs text-center text-gray-400 mb-3">
+          花費 ${PATERNITY_COST.toLocaleString()}，指定目標，擲骰嚴格較大者搶走對方一個孩子
         </p>
-        <div className="flex gap-2">
-          {btn('😈 搶奪！', 'attempt_steal', undefined, 'flex-1 bg-red-500 hover:bg-red-600')}
-          {btn('😇 算了', 'skip_steal', undefined, 'flex-1 bg-gray-400 hover:bg-gray-500')}
+        {!canAfford && <p className="text-center text-red-500 text-xs mb-2">💸 金錢不足（需 ${PATERNITY_COST}）</p>}
+        <div className="flex flex-col gap-2">
+          {targets.map(p => (
+            <button
+              key={p.id}
+              onClick={() => act('pick_paternity_target', { targetId: p.id })}
+              disabled={loading || !canAfford}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-teal-200 hover:border-teal-400 hover:bg-teal-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <div className="w-6 h-6 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+              <span className="font-medium">{p.name}</span>
+              <span className="ml-auto text-xs text-gray-400">👶{p.children}</span>
+            </button>
+          ))}
+          {btn('🚪 放棄', 'skip_paternity', undefined, 'mt-1 bg-gray-400 hover:bg-gray-500 text-sm')}
         </div>
       </div>
     )
   }
 
-  // ── STEAL ROLLING ──
-  if (state.phase === 'steal_rolling') {
-    const thief = players.find(p => p.id === pd.thief_id)
-    const victim = players.find(p => p.id === pd.victim_id)
-    const isThief = pd.thief_id === myId
-    const isVictim = pd.victim_id === myId
-    const inSteal = isThief || isVictim
-    const myRollDone = (isThief && pd.thief_roll !== undefined) || (isVictim && pd.victim_roll !== undefined)
-    const bothRolled = pd.thief_roll !== undefined && pd.victim_roll !== undefined
-    const thiefWins = bothRolled && (pd.thief_roll as number) > (pd.victim_roll as number)
+  // ── PATERNITY ROLLING ──
+  if (state.phase === 'paternity_rolling') {
+    const attacker = players.find(p => p.id === pd.attacker_id)
+    const target = players.find(p => p.id === pd.target_id)
+    const isAttacker = pd.attacker_id === myId
+    const isTarget = pd.target_id === myId
+    const inPaternity = isAttacker || isTarget
+    const myRollDone = (isAttacker && pd.attacker_roll !== undefined) || (isTarget && pd.target_roll !== undefined)
+    const bothRolled = pd.attacker_roll !== undefined && pd.target_roll !== undefined
+    const attackerWins = bothRolled && (pd.attacker_roll as number) > (pd.target_roll as number)
 
     return (
       <div className="bg-white rounded-2xl p-4 shadow">
-        <p className="font-bold text-red-600 text-center mb-3">😈 搶奪擲骰！</p>
+        <p className="font-bold text-teal-700 text-center mb-3">🧬 親子鑑定擲骰！</p>
         <VsPanel
-          leftLabel={thief?.name ?? ''}
-          leftColor={thief?.color}
-          leftRoll={pd.thief_roll as number | undefined}
+          leftLabel={attacker?.name ?? ''}
+          leftColor={attacker?.color}
+          leftRoll={pd.attacker_roll as number | undefined}
           leftTag="搶方"
-          rightLabel={victim?.name ?? ''}
-          rightColor={victim?.color}
-          rightRoll={pd.victim_roll as number | undefined}
+          rightLabel={target?.name ?? ''}
+          rightColor={target?.color}
+          rightRoll={pd.target_roll as number | undefined}
           rightTag="守方"
           accentColor="red"
         />
         {bothRolled && (
-          <p className={`text-center font-bold text-sm mb-3 ${thiefWins ? 'text-red-600' : 'text-gray-600'}`}>
-            {thiefWins ? `😈 ${thief?.name} 搶奪成功！` : `😅 ${thief?.name} 搶奪失敗！`}
+          <p className={`text-center font-bold text-sm mb-3 ${attackerWins ? 'text-teal-700' : 'text-gray-600'}`}>
+            {attackerWins ? `🧬 ${attacker?.name} 親子鑑定成功！` : `😅 ${attacker?.name} 鑑定失敗！`}
           </p>
         )}
-        {inSteal && !myRollDone && btn('🎲 擲骰！', 'steal_roll', undefined, 'w-full bg-red-500 hover:bg-red-600')}
-        {(!inSteal || myRollDone) && !bothRolled && <p className="text-gray-400 text-sm text-center">等待對方擲骰...</p>}
-        {bothRolled && !inSteal && <p className="text-gray-400 text-sm text-center">結算中...</p>}
+        {inPaternity && !myRollDone && (
+          diceRolling
+            ? <DiceDisplay rolling={true} />
+            : btn('🎲 擲骰！', 'paternity_roll', undefined, 'w-full bg-teal-500 hover:bg-teal-600')
+        )}
+        {(!inPaternity || myRollDone) && !bothRolled && <p className="text-gray-400 text-sm text-center">等待對方擲骰...</p>}
+        {bothRolled && !inPaternity && <p className="text-gray-400 text-sm text-center">結算中...</p>}
       </div>
     )
   }
@@ -482,20 +486,18 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
     const partyRolls = (pd.party_rolls ?? {}) as Record<string, number>
     const activePlayers = players.filter(p => !p.is_bankrupt)
     const myRollDone = partyRolls[myId] !== undefined
-    const maxRoll = Object.values(partyRolls).length > 0
-      ? Math.max(...Object.values(partyRolls))
-      : 0
+    const allDone = Object.keys(partyRolls).length === activePlayers.length
 
     return (
       <div className="bg-white rounded-2xl p-4 shadow">
         <p className="font-bold text-yellow-600 text-center mb-1">🎉 多人派對！</p>
         <p className="text-xs text-center text-gray-400 mb-3">
-          {host?.name} 舉辦派對，點數最高者得孩子！
+          {host?.name} 舉辦派對，擲出偶數者得孩子！
         </p>
         <div className="flex flex-col gap-1.5 mb-3">
           {activePlayers.map(p => {
             const roll = partyRolls[p.id]
-            const isWinner = roll !== undefined && roll === maxRoll && Object.values(partyRolls).length === activePlayers.length
+            const isWinner = roll !== undefined && roll % 2 === 0 && allDone
             return (
               <div key={p.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${isWinner ? 'border-yellow-400 bg-yellow-50' : 'border-gray-100 bg-gray-50'}`}>
                 <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />

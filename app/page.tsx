@@ -64,14 +64,19 @@ export default function Home() {
             <div className="flex items-start gap-2">
               <span className="text-base leading-none mt-0.5">💕</span>
               <span className="text-gray-600">
-                落到<b>汽車旅館</b>→ 進行人與人的連結，擲骰高者得孩子
+                <b>汽車旅館</b>→ 進行人與人的連結，擲骰高者生孩子！
+              </span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-base leading-none mt-0.5">🎉</span>
+              <span className="text-gray-600">
+                <b>多人派對</b>→ 所有人一起黑皮，擲骰雙數生孩子！
               </span>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-base leading-none mt-0.5">😈</span>
               <span className="text-gray-600">
-                落到<b>對手地產</b>→
-                引誘對手孩子，擲骰比大小，引誘方點數大才成功
+                <b>親子鑑定</b>→ 孩子有你的DNA？骰贏孩子就是你的！
               </span>
             </div>
             <div className="flex items-start gap-2">
