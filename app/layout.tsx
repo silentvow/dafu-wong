@@ -4,6 +4,18 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "大腹翁",
   description: "比誰生最多小孩的大富翁遊戲",
+  openGraph: {
+    title: "大腹翁",
+    description: "最會生孩子的才是贏家！多人網頁互動遊戲",
+    images: [{ url: "/ogimage.png", width: 1200, height: 630 }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "大腹翁",
+    description: "最會生孩子的才是贏家！多人網頁互動遊戲",
+    images: ["/ogimage.png"],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
