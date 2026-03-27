@@ -231,7 +231,7 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
             ))}
           </div>
         )}
-        <
+        <a
           href="/"
           className="inline-block w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-xl transition"
         >
