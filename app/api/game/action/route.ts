@@ -66,14 +66,10 @@ export async function POST(req: NextRequest) {
     const fresh = await db.from('players').select().eq('room_id', roomId)
     const freshPlayers = (fresh.data ?? []) as Player[]
 
-    // Near-win warning: someone has enough children but hasn't passed start yet
-    for (const p of freshPlayers.filter(p => !p.is_bankrupt && p.children >= WIN_CHILDREN)) {
-      await log(db, roomId, `⚠️ ${p.name} 已集齊 ${p.children} 個孩子！只差一步——再經過起點，王者加冕！`)
-    }
-
     const nextId = nextPlayerIndex(freshPlayers, state.current_player_id!)
     const nextPlayer = freshPlayers.find(p => p.id === nextId)!
-    const nextTurn = nextId === state.current_player_id
+    const currentPlayer = freshPlayers.find(p => p.id === state.current_player_id)
+    const nextTurn = nextPlayer.turn_order <= (currentPlayer?.turn_order ?? 0)
       ? state.turn_number + 1
       : state.turn_number
     await db.from('game_state').update({

@@ -214,7 +214,6 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
   // ── FINISHED ──
   if (state.phase === 'finished') {
     const winner = players.find(p => p.id === pd.winner_id)
-    const sorted = [...players].sort((a, b) => b.children - a.children)
     const keyMoments = (logs ?? []).filter(l =>
       KEY_MOMENT_KEYWORDS.some(kw => l.message.includes(kw))
     )
@@ -224,17 +223,6 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
         <div className="text-5xl mb-1">🏆</div>
         <div className="text-xl font-bold text-amber-700 mb-0.5">{winner?.name} 獲勝！</div>
         <div className="text-gray-500 text-sm mb-3">{winner?.children} 個孩子 🍼</div>
-        <div className="text-left bg-amber-50 rounded-xl p-3 mb-3">
-          <div className="text-xs font-bold text-amber-700 mb-2">最終排名</div>
-          {sorted.map((p, i) => (
-            <div key={p.id} className="flex items-center gap-2 py-1">
-              <span className="text-sm w-5">{['🥇','🥈','🥉'][i] ?? `${i+1}.`}</span>
-              <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
-              <span className="font-medium text-sm flex-1">{p.name}</span>
-              <span className="text-sm text-gray-500">👶 {p.children}</span>
-            </div>
-          ))}
-        </div>
         {keyMoments.length > 0 && (
           <div className="text-left bg-rose-50 rounded-xl p-3 mb-3">
             <div className="text-xs font-bold text-rose-700 mb-2">✨ 關鍵時刻</div>
@@ -243,7 +231,7 @@ export default function ActionPanel({ state, players, myId, logs, onAction }: Pr
             ))}
           </div>
         )}
-        <a
+        <
           href="/"
           className="inline-block w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-xl transition"
         >
