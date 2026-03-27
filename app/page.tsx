@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Analytics } from "@vercel/analytics/next";
 
 export default function Home() {
   const router = useRouter();
@@ -156,6 +157,7 @@ export default function Home() {
           </div>
         )}
       </div>
+      <Analytics />
     </div>
   );
 }
